@@ -254,6 +254,9 @@ class BayutScraper(BaseScraper):
         city_slug = _CITY_SLUGS_MAP.get(city_str, f"/{city_str.replace(' ', '-')}")
 
         facet_filter = [f"location.slug_l1:{city_slug}"]
+        if request.area:
+            area_slug = request.area.lower().strip().replace(" ", "-")
+            facet_filter.append(f"location.slug_l2:{city_slug}/{area_slug}")
 
         filters = f"purpose:{purpose} AND category.slug_l1:{cat_slug}"
         if request.price_min is not None:

@@ -75,6 +75,42 @@ _SLUGS_AR: dict = {
     ("commercial", "for-rent"): "محلات-للإيجار",
 }
 
+# ── Area/District slug → Arabic name (for URL path filtering) ────────────────
+_AREAS_AR: dict = {
+    # Jeddah
+    "obhur-al-shamaliyah": "أبحر-الشمالية", "obhur-al-janubiyah": "أبحر-الجنوبية",
+    "al-shati": "الشاطئ",         "al-hamra": "الحمراء",          "al-zahraa": "الزهراء",
+    "al-nakheel": "النخيل",       "al-rawdah": "الروضة",          "al-murjan": "المرجان",
+    "al-naeem": "النعيم",         "al-salamah": "السلامة",        "al-samer": "السامر",
+    "al-marwah": "المروة",        "al-khalidiyah": "الخالدية",    "al-bawadi": "البوادي",
+    "al-wahah": "الواحة",         "al-nuzha": "النزهة",           "al-zomorod": "الزمرد",
+    "briman": "بريمان",           "al-rabwah": "الربوة",          "al-rawabi": "الروابي",
+    "al-safa": "الصفا",           "al-sharafiyah": "الشرفية",     "al-balad": "البلد",
+    "al-ruwais": "الرويس",        "al-fayhaa": "الفيحاء",         "al-aziziyah": "العزيزية",
+    "al-mohammadiyah": "المحمدية","al-musharifah": "المشرفة",     "bani-malik": "بني-مالك",
+    "al-manar": "المنار",         "al-andalus": "الأندلس",        "al-salhiyah": "الصالحية",
+    "al-jamiah": "الجامعة",       "al-faisaliyah": "الفيصلية",   "al-naseem": "النسيم",
+    "al-nahdah": "النهضة",        "al-basateen": "البساتين",      "mraikh": "مريخ",
+    "al-taiaser": "التيسير",      "al-sabeel": "السبيل",          "al-riyadh-dist": "الرياض",
+    "al-qadisiyah": "القادسية",   "al-salam": "السلام",           "al-worood": "الورود",
+    "al-amin": "الأمين",          "al-adl": "العدل",              "al-falah": "الفلاح",
+    "al-sawari": "السواري",       "al-sulaimaniyah": "السليمانية","al-noor": "النور",
+    "al-ribat": "الرباط",         "al-wafa": "الوفاء",            "al-rehab": "الرحاب",
+    "abruq-al-rughamah": "عبروق-الرغامة", "al-azhar": "الأزهر",  "al-rihab": "الرحاب",
+    "prince-fawwaz-south": "الأمير-فواز-الجنوبي",                 "al-waha": "الواحة",
+    "al-hamdaniyah": "الحمدانية", "al-ajwad": "الأجواد",          "al-rayyan": "الريان",
+    "al-majd": "المجد",           "al-wazzan": "الوزان",          "um-al-hamam": "أم-الحمام",
+    "al-nawras": "النوارس",       "al-mishrifah": "المشرفة",      "king-fahd": "الملك-فهد",
+    "king-abdul-aziz": "الملك-عبدالعزيز", "al-zaytoun": "الزيتون","al-taawun": "التعاون",
+    "al-shohada": "الشهداء",      "al-jil": "الجيل",              "al-mataar": "المطار",
+    "al-waled": "الوليد",         "al-jawhara": "الجوهرة",        "al-quzah": "القوزاء",
+    # Riyadh
+    "al-olaya": "العليا",         "al-yasmin": "الياسمين",        "al-narjis": "النرجس",
+    "al-arid": "العارض",          "hitin": "حطين",                "al-sahafah": "الصحافة",
+    "qurtubah": "قرطبة",          "al-worood-r": "الورود",        "al-aqiq": "العقيق",
+    "al-qirawan": "القيروان",     "diplomatic-quarter": "الحي-الدبلوماسي",
+}
+
 # ── Sub-regions: scraped in addition to the main city URL for more results ────
 _SUBREGIONS: dict = {
     "jeddah": ["شمال-جدة", "جنوب-جدة", "شرق-جدة", "غرب-جدة", "وسط-جدة"],
@@ -321,7 +357,11 @@ async () => {{
             qs_parts.append(f"wc={int(request.bathrooms)}")
         qs        = ("?" + "&".join(qs_parts)) if qs_parts else ""
         city_base = f"{BASE}/{quote(cat_slug)}/{quote(city_ar)}"
-        cache_key = f"{city_str}:{cat_slug}:{qs}"
+        if request.area:
+            area_slug = request.area.lower().strip().replace(" ", "-")
+            area_ar = _AREAS_AR.get(area_slug, area_slug)
+            city_base = f"{city_base}/{quote(area_ar)}"
+        cache_key = f"{city_str}:{cat_slug}:{request.area or ''}:{qs}"
         return city_base, qs, cache_key
 
     async def _make_sessions(self):

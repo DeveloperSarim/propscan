@@ -267,6 +267,9 @@ class WasaltScraper(BaseScraper):
         }
         if pt and pt in _WASALT_TYPES:
             base_params += f"&type={_WASALT_TYPES[pt]}"
+        if request.area:
+            area_slug = request.area.lower().strip().replace(" ", "-")
+            base_params += f"&districtSlug={area_slug}"
 
         base_url = f"{BASE}/en/{purpose}/search?{base_params}"
 
