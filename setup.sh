@@ -3,6 +3,12 @@ set -e
 
 echo "=== Saudi Real Estate Scraper API — Setup ==="
 
+# ── Auto-install python3-venv on Debian/Ubuntu VPS ───────────────────────────
+if ! python3 -m ensurepip --version &>/dev/null 2>&1; then
+    echo "Installing python3-venv (requires sudo/root)..."
+    apt-get update -q && apt-get install -y python3-venv python3-pip
+fi
+
 # Check Python
 if ! command -v python3 &>/dev/null; then
     echo "ERROR: Python 3 not found. Install from https://python.org"
@@ -29,18 +35,16 @@ pip install -r requirements.txt -q
 # Install Chromium
 echo "Installing Playwright Chromium..."
 playwright install chromium
+playwright install-deps chromium
 
 # Copy .env if not exists
 if [ ! -f ".env" ]; then
     cp .env.example .env
-    echo "Created .env from .env.example — edit it if needed"
+    echo ""
+    echo "⚠  .env created from template — fill in SMTP credentials before starting."
 fi
 
 echo ""
 echo "=== Setup complete! ==="
 echo ""
-echo "Start the API:"
-echo "  source venv/bin/activate"
-echo "  uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
-echo ""
-echo "Or just run:  bash run.sh"
+echo "Start the API:  bash run.sh"
