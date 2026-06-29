@@ -1,0 +1,138 @@
+/* Global styles ported verbatim from the PropScan Hero design <helmet>. */
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+#root {
+  height: 100vh;
+}
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+@keyframes ps-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes ps-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes ps-scan {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+@keyframes ps-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+/* Override leaflet.markercluster default styles — we use custom SVG teardrop icons */
+.marker-cluster { background: transparent !important; }
+.marker-cluster div { background: transparent !important; border: none !important; box-shadow: none !important; }
+/* Dual-handle range slider used by the price popovers. */
+input.ps-range {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: none;
+}
+input.ps-range::-webkit-slider-runnable-track {
+  height: 3px;
+  background: transparent;
+}
+input.ps-range::-moz-range-track {
+  height: 3px;
+  background: transparent;
+}
+input.ps-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  margin-top: -7.5px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #16a34a;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+input.ps-range::-moz-range-thumb {
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #16a34a;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+/* Mobile: stack the split/map columns and let rows wrap. */
+@media (max-width: 860px) {
+  .ps-row {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+  }
+  .ps-listcol {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-right: none !important;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .ps-mapcol {
+    min-height: 420px !important;
+    flex: none !important;
+    height: 60vh;
+  }
+  .ps-mapside {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-right: none !important;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .ps-cardspanel {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-left: none !important;
+    border-top: 1px solid #e5e7eb;
+  }
+  .ps-herorow {
+    flex-wrap: wrap !important;
+  }
+  .ps-herorow > * {
+    flex: 1 1 auto !important;
+  }
+  .ps-topbar {
+    flex-wrap: wrap !important;
+    height: auto !important;
+    min-height: 48px !important;
+    padding: 6px 12px !important;
+    gap: 6px !important;
+  }
+}

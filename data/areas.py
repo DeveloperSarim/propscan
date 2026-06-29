@@ -1,0 +1,196 @@
+"""
+Static area/district lists for major Saudi cities.
+Used as fallback when live scraping fails.
+Covers the top 8 cities with their most common districts.
+"""
+
+from typing import Dict, List
+
+# fmt: off
+AREAS_BY_CITY: Dict[str, List[dict]] = {
+
+    "riyadh": [
+        {"id": "r01",  "name": "Al Olaya",            "name_ar": "العليا",            "slug": "al-olaya"},
+        {"id": "r02",  "name": "Al Nakheel",           "name_ar": "النخيل",            "slug": "al-nakheel"},
+        {"id": "r03",  "name": "Al Sulaimaniyah",      "name_ar": "السليمانية",        "slug": "al-sulaimaniyah"},
+        {"id": "r04",  "name": "Al Rawdah",            "name_ar": "الروضة",            "slug": "al-rawdah"},
+        {"id": "r05",  "name": "Al Mursalat",          "name_ar": "المرسلات",          "slug": "al-mursalat"},
+        {"id": "r06",  "name": "Al Sahafah",           "name_ar": "الصحافة",           "slug": "al-sahafah"},
+        {"id": "r07",  "name": "Qurtubah",             "name_ar": "قرطبة",             "slug": "qurtubah"},
+        {"id": "r08",  "name": "Hitin",                "name_ar": "حطين",              "slug": "hitin"},
+        {"id": "r09",  "name": "Al Yasmin",            "name_ar": "الياسمين",          "slug": "al-yasmin"},
+        {"id": "r10",  "name": "Al Narjis",            "name_ar": "النرجس",            "slug": "al-narjis"},
+        {"id": "r11",  "name": "Al Arid",              "name_ar": "العارض",            "slug": "al-arid"},
+        {"id": "r12",  "name": "Al Ghdir",             "name_ar": "الغدير",            "slug": "al-ghdir"},
+        {"id": "r13",  "name": "Al Wadi",              "name_ar": "الوادي",            "slug": "al-wadi"},
+        {"id": "r14",  "name": "Al Rabi",              "name_ar": "الربيع",            "slug": "al-rabi"},
+        {"id": "r15",  "name": "Khashm Al Aan",        "name_ar": "خشم العان",         "slug": "khashm-al-aan"},
+        {"id": "r16",  "name": "Al Shifa",             "name_ar": "الشفا",             "slug": "al-shifa"},
+        {"id": "r17",  "name": "Al Malaz",             "name_ar": "الملز",             "slug": "al-malaz"},
+        {"id": "r18",  "name": "Al Nahdah",            "name_ar": "النهضة",            "slug": "al-nahdah"},
+        {"id": "r19",  "name": "Ishbiliyah",           "name_ar": "إشبيلية",           "slug": "ishbiliyah"},
+        {"id": "r20",  "name": "Al Batha",             "name_ar": "البطحاء",           "slug": "al-batha"},
+        {"id": "r21",  "name": "Al Dirah",             "name_ar": "الديرة",            "slug": "al-dirah"},
+        {"id": "r22",  "name": "Al Mansoura",          "name_ar": "المنصورة",          "slug": "al-mansoura"},
+        {"id": "r23",  "name": "Al Aziziyah",          "name_ar": "العزيزية",          "slug": "al-aziziyah"},
+        {"id": "r24",  "name": "Al Worood",            "name_ar": "الورود",            "slug": "al-worood"},
+        {"id": "r25",  "name": "Al Hamra",             "name_ar": "الحمراء",           "slug": "al-hamra"},
+        {"id": "r26",  "name": "Al Khaleej",           "name_ar": "الخليج",            "slug": "al-khaleej"},
+        {"id": "r27",  "name": "Tuwaiq",               "name_ar": "طويق",              "slug": "tuwaiq"},
+        {"id": "r28",  "name": "Dhahrat Laban",        "name_ar": "ظهرة لبن",          "slug": "dhahrat-laban"},
+        {"id": "r29",  "name": "Al Aqiq",              "name_ar": "العقيق",            "slug": "al-aqiq"},
+        {"id": "r30",  "name": "Diplomatic Quarter",   "name_ar": "الحي الدبلوماسي",   "slug": "diplomatic-quarter"},
+        {"id": "r31",  "name": "Al Mohammadiyah",      "name_ar": "المحمدية",          "slug": "al-mohammadiyah"},
+        {"id": "r32",  "name": "Al Qirawan",           "name_ar": "القيروان",          "slug": "al-qirawan"},
+        {"id": "r33",  "name": "Al Hazm",              "name_ar": "الحزم",             "slug": "al-hazm"},
+        {"id": "r34",  "name": "Al Murabba",           "name_ar": "المربع",            "slug": "al-murabba"},
+        {"id": "r35",  "name": "Al Fayha",             "name_ar": "الفيحاء",           "slug": "al-fayha"},
+        {"id": "r36",  "name": "Al Nuzhah",            "name_ar": "النزهة",            "slug": "al-nuzhah"},
+        {"id": "r37",  "name": "Al Nasriyah",          "name_ar": "الناصرية",          "slug": "al-nasriyah"},
+        {"id": "r38",  "name": "Badi",                 "name_ar": "بدر",               "slug": "badi"},
+        {"id": "r39",  "name": "Al Munsiyah",          "name_ar": "المونسية",          "slug": "al-munsiyah"},
+        {"id": "r40",  "name": "Al Masif",             "name_ar": "المصيف",            "slug": "al-masif"},
+        {"id": "r41",  "name": "Irqah",                "name_ar": "عرقه",              "slug": "irqah"},
+        {"id": "r42",  "name": "Al Wazarat",           "name_ar": "الوزارات",          "slug": "al-wazarat"},
+        {"id": "r43",  "name": "Al Salam",             "name_ar": "السلام",            "slug": "al-salam"},
+        {"id": "r44",  "name": "Al Marwa",             "name_ar": "المروة",            "slug": "al-marwa"},
+        {"id": "r45",  "name": "Al Jazeera",           "name_ar": "الجزيرة",           "slug": "al-jazeera"},
+        {"id": "r46",  "name": "Al Rawabi",            "name_ar": "الروابي",           "slug": "al-rawabi"},
+        {"id": "r47",  "name": "Al Suwaidi",           "name_ar": "السويدي",           "slug": "al-suwaidi"},
+        {"id": "r48",  "name": "Al Badiah",            "name_ar": "البديعة",           "slug": "al-badiah"},
+        {"id": "r49",  "name": "Al Mashaer",           "name_ar": "المشاعل",           "slug": "al-mashaer"},
+        {"id": "r50",  "name": "Dhahrat Al Badiah",    "name_ar": "ظهرة البديعة",      "slug": "dhahrat-al-badiah"},
+    ],
+
+    "jeddah": [
+        {"id": "j01",  "name": "Al Hamra",             "name_ar": "الحمراء",           "slug": "al-hamra"},
+        {"id": "j02",  "name": "Al Zahraa",            "name_ar": "الزهراء",           "slug": "al-zahraa"},
+        {"id": "j03",  "name": "Al Safa",              "name_ar": "الصفا",             "slug": "al-safa"},
+        {"id": "j04",  "name": "Al Rawdah",            "name_ar": "الروضة",            "slug": "al-rawdah"},
+        {"id": "j05",  "name": "Al Ruwais",            "name_ar": "الرويس",            "slug": "al-ruwais"},
+        {"id": "j06",  "name": "Al Nuzha",             "name_ar": "النزهة",            "slug": "al-nuzha"},
+        {"id": "j07",  "name": "Al Balad",             "name_ar": "البلد",             "slug": "al-balad"},
+        {"id": "j08",  "name": "Al Salamah",           "name_ar": "السلامة",           "slug": "al-salamah"},
+        {"id": "j09",  "name": "Al Shati",             "name_ar": "الشاطئ",            "slug": "al-shati"},
+        {"id": "j10",  "name": "Al Naeem",             "name_ar": "النعيم",            "slug": "al-naeem"},
+        {"id": "j11",  "name": "Obhur Al Shamaliyah",  "name_ar": "أبحر الشمالية",     "slug": "obhur-al-shamaliyah"},
+        {"id": "j12",  "name": "Obhur Al Janubiyah",   "name_ar": "أبحر الجنوبية",     "slug": "obhur-al-janubiyah"},
+        {"id": "j13",  "name": "Al Taiaser",           "name_ar": "التيسير",           "slug": "al-taiaser"},
+        {"id": "j14",  "name": "Al Marwah",            "name_ar": "المروة",            "slug": "al-marwah"},
+        {"id": "j15",  "name": "Al Bawadi",            "name_ar": "البوادي",           "slug": "al-bawadi"},
+        {"id": "j16",  "name": "Al Fayhaa",            "name_ar": "الفيحاء",           "slug": "al-fayhaa"},
+        {"id": "j17",  "name": "Al Khalidiyah",        "name_ar": "الخالدية",          "slug": "al-khalidiyah"},
+        {"id": "j18",  "name": "Mraikh",               "name_ar": "مريخ",              "slug": "mraikh"},
+        {"id": "j19",  "name": "Al Aziziyah",          "name_ar": "العزيزية",          "slug": "al-aziziyah"},
+        {"id": "j20",  "name": "Al Mohammadiyah",      "name_ar": "المحمدية",          "slug": "al-mohammadiyah"},
+        {"id": "j21",  "name": "Al Basateen",          "name_ar": "البساتين",          "slug": "al-basateen"},
+        {"id": "j22",  "name": "Al Wahah",             "name_ar": "الواحة",            "slug": "al-wahah"},
+        {"id": "j23",  "name": "Prince Fawwaz South",  "name_ar": "الأمير فواز الجنوبي","slug": "prince-fawwaz"},
+        {"id": "j24",  "name": "Al Rabwah",            "name_ar": "الربوة",            "slug": "al-rabwah"},
+        {"id": "j25",  "name": "Al Salhiyah",          "name_ar": "الصالحية",          "slug": "al-salhiyah"},
+        {"id": "j26",  "name": "Al Nakheel",           "name_ar": "النخيل",            "slug": "al-nakheel"},
+        {"id": "j27",  "name": "Al Riyadh",            "name_ar": "الرياض",            "slug": "al-riyadh-dist"},
+        {"id": "j28",  "name": "Al Waha",              "name_ar": "الواحة",            "slug": "al-waha"},
+        {"id": "j29",  "name": "Al Faisaliyah",        "name_ar": "الفيصلية",          "slug": "al-faisaliyah"},
+        {"id": "j30",  "name": "Al Rihab",             "name_ar": "الرحاب",            "slug": "al-rihab"},
+    ],
+
+    "dammam": [
+        {"id": "d01",  "name": "Al Shati",             "name_ar": "الشاطئ",            "slug": "al-shati"},
+        {"id": "d02",  "name": "Al Faisaliyah",        "name_ar": "الفيصلية",          "slug": "al-faisaliyah"},
+        {"id": "d03",  "name": "Al Nawras",            "name_ar": "النوارس",           "slug": "al-nawras"},
+        {"id": "d04",  "name": "Al Anoud",             "name_ar": "العنود",            "slug": "al-anoud"},
+        {"id": "d05",  "name": "Al Murjan",            "name_ar": "المرجان",           "slug": "al-murjan"},
+        {"id": "d06",  "name": "Al Nakheel",           "name_ar": "النخيل",            "slug": "al-nakheel"},
+        {"id": "d07",  "name": "Al Badiyah",           "name_ar": "البادية",           "slug": "al-badiyah"},
+        {"id": "d08",  "name": "Uhud",                 "name_ar": "أحد",               "slug": "uhud"},
+        {"id": "d09",  "name": "Al Dana",              "name_ar": "الدانة",            "slug": "al-dana"},
+        {"id": "d10",  "name": "Al Mazrouiyah",        "name_ar": "المزروعية",         "slug": "al-mazrouiyah"},
+        {"id": "d11",  "name": "Al Jawharah",          "name_ar": "الجوهرة",           "slug": "al-jawharah"},
+        {"id": "d12",  "name": "Al Hamraa",            "name_ar": "الحمراء",           "slug": "al-hamraa"},
+        {"id": "d13",  "name": "Al Salam",             "name_ar": "السلام",            "slug": "al-salam"},
+        {"id": "d14",  "name": "Al Aziziyah",          "name_ar": "العزيزية",          "slug": "al-aziziyah"},
+        {"id": "d15",  "name": "Al Rakah Al Shamaliyah","name_ar": "الراكة الشمالية",  "slug": "al-rakah-north"},
+        {"id": "d16",  "name": "Al Rakah Al Janubiyah","name_ar": "الراكة الجنوبية",   "slug": "al-rakah-south"},
+        {"id": "d17",  "name": "Al Khalidiyah",        "name_ar": "الخالدية",          "slug": "al-khalidiyah"},
+        {"id": "d18",  "name": "Al Mohammadiyah",      "name_ar": "المحمدية",          "slug": "al-mohammadiyah"},
+    ],
+
+    "al khobar": [
+        {"id": "k01",  "name": "Al Aqrabiyah",         "name_ar": "العقربية",          "slug": "al-aqrabiyah"},
+        {"id": "k02",  "name": "Al Thuqbah",           "name_ar": "الثقبة",            "slug": "al-thuqbah"},
+        {"id": "k03",  "name": "Al Khobar Al Shamaliyah","name_ar": "الخبر الشمالية",  "slug": "khobar-north"},
+        {"id": "k04",  "name": "Al Aamal",             "name_ar": "الآمال",            "slug": "al-aamal"},
+        {"id": "k05",  "name": "Al Rakkah",            "name_ar": "الراكة",            "slug": "al-rakkah"},
+        {"id": "k06",  "name": "Ishbiliyah",           "name_ar": "إشبيلية",           "slug": "ishbiliyah"},
+        {"id": "k07",  "name": "Al Waha",              "name_ar": "الواحة",            "slug": "al-waha"},
+        {"id": "k08",  "name": "Al Aziziyah",          "name_ar": "العزيزية",          "slug": "al-aziziyah"},
+        {"id": "k09",  "name": "Al Mohammadiyah",      "name_ar": "المحمدية",          "slug": "al-mohammadiyah"},
+        {"id": "k10",  "name": "Al Rawabi",            "name_ar": "الروابي",           "slug": "al-rawabi"},
+        {"id": "k11",  "name": "Al Yarmouk",           "name_ar": "اليرموك",           "slug": "al-yarmouk"},
+        {"id": "k12",  "name": "Al Hamra",             "name_ar": "الحمراء",           "slug": "al-hamra"},
+    ],
+
+    "mecca": [
+        {"id": "m01",  "name": "Al Aziziyah",          "name_ar": "العزيزية",          "slug": "al-aziziyah"},
+        {"id": "m02",  "name": "Al Zaher",             "name_ar": "الزاهر",            "slug": "al-zaher"},
+        {"id": "m03",  "name": "Ajyad",                "name_ar": "أجياد",             "slug": "ajyad"},
+        {"id": "m04",  "name": "Al Adl",               "name_ar": "العدل",             "slug": "al-adl"},
+        {"id": "m05",  "name": "Al Rusaifah",          "name_ar": "الرصيفة",           "slug": "al-rusaifah"},
+        {"id": "m06",  "name": "Al Hujoun",            "name_ar": "الحجون",            "slug": "al-hujoun"},
+        {"id": "m07",  "name": "Jarwal",               "name_ar": "جرول",              "slug": "jarwal"},
+        {"id": "m08",  "name": "Al Masfalah",          "name_ar": "المسفلة",           "slug": "al-masfalah"},
+        {"id": "m09",  "name": "Al Mansour",           "name_ar": "المنصور",           "slug": "al-mansour"},
+        {"id": "m10",  "name": "Kudai",                "name_ar": "كدي",               "slug": "kudai"},
+        {"id": "m11",  "name": "Al Shoqiyah",          "name_ar": "الشوقية",           "slug": "al-shoqiyah"},
+        {"id": "m12",  "name": "Al Nuzha",             "name_ar": "النزهة",            "slug": "al-nuzha"},
+    ],
+
+    "medina": [
+        {"id": "md01", "name": "Al Uyun",              "name_ar": "العيون",            "slug": "al-uyun"},
+        {"id": "md02", "name": "Al Khalidiyah",        "name_ar": "الخالدية",          "slug": "al-khalidiyah"},
+        {"id": "md03", "name": "Al Aziziyah",          "name_ar": "العزيزية",          "slug": "al-aziziyah"},
+        {"id": "md04", "name": "Quba",                 "name_ar": "قباء",              "slug": "quba"},
+        {"id": "md05", "name": "Al Anbariyah",         "name_ar": "العنبرية",          "slug": "al-anbariyah"},
+        {"id": "md06", "name": "Al Ranuna",            "name_ar": "الرانوناء",         "slug": "al-ranuna"},
+        {"id": "md07", "name": "Al Jumuah",            "name_ar": "الجمعة",            "slug": "al-jumuah"},
+        {"id": "md08", "name": "Syed Al Shuhada",      "name_ar": "سيد الشهداء",       "slug": "syed-al-shuhada"},
+        {"id": "md09", "name": "Al Noor",              "name_ar": "النور",             "slug": "al-noor"},
+        {"id": "md10", "name": "Al Haram",             "name_ar": "الحرم",             "slug": "al-haram"},
+    ],
+
+    "tabuk": [
+        {"id": "t01",  "name": "Al Rawdah",            "name_ar": "الروضة",            "slug": "al-rawdah"},
+        {"id": "t02",  "name": "Al Wesam",             "name_ar": "الوسام",            "slug": "al-wesam"},
+        {"id": "t03",  "name": "Al Aziziyah",          "name_ar": "العزيزية",          "slug": "al-aziziyah"},
+        {"id": "t04",  "name": "Al Salam",             "name_ar": "السلام",            "slug": "al-salam"},
+        {"id": "t05",  "name": "Al Nahdah",            "name_ar": "النهضة",            "slug": "al-nahdah"},
+        {"id": "t06",  "name": "Al Ruwais",            "name_ar": "الرويس",            "slug": "al-ruwais"},
+        {"id": "t07",  "name": "King Fahad",           "name_ar": "الملك فهد",         "slug": "king-fahad"},
+    ],
+
+    "abha": [
+        {"id": "a01",  "name": "Al Marooj",            "name_ar": "المروج",            "slug": "al-marooj"},
+        {"id": "a02",  "name": "Al Manhal",            "name_ar": "المنهل",            "slug": "al-manhal"},
+        {"id": "a03",  "name": "Al Miftaha",           "name_ar": "المفتاحة",          "slug": "al-miftaha"},
+        {"id": "a04",  "name": "Al Nakheel",           "name_ar": "النخيل",            "slug": "al-nakheel"},
+        {"id": "a05",  "name": "Al Aziziyah",          "name_ar": "العزيزية",          "slug": "al-aziziyah"},
+    ],
+
+    "hail": [
+        {"id": "h01",  "name": "Al Rawdah",            "name_ar": "الروضة",            "slug": "al-rawdah"},
+        {"id": "h02",  "name": "Al Aziziyah",          "name_ar": "العزيزية",          "slug": "al-aziziyah"},
+        {"id": "h03",  "name": "Al Murabbaa",          "name_ar": "المربع",            "slug": "al-murabbaa"},
+        {"id": "h04",  "name": "Al Nakheel",           "name_ar": "النخيل",            "slug": "al-nakheel"},
+        {"id": "h05",  "name": "Al Salam",             "name_ar": "السلام",            "slug": "al-salam"},
+    ],
+}
+
+# Normalise lookup: also match "Al Khobar" → "al khobar"
+_NORMALISED = {k.lower().replace("-", " "): v for k, v in AREAS_BY_CITY.items()}
+
+
+def get_static_areas(city: str) -> List[dict]:
+    """Return static areas for a city, or [] if not in the list."""
+    key = city.lower().strip().replace("-", " ")
+    return _NORMALISED.get(key, [])
