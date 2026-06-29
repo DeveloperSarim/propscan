@@ -2,7 +2,7 @@ services:
   propscan:
     build: .
     ports:
-      - "${PORT:-8000}:8000"
+      - "${PORT:-4823}:8000"
     env_file:
       - .env
     restart: unless-stopped
