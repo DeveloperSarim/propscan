@@ -8,18 +8,22 @@ echo ""
 
 # Check Docker
 if ! command -v docker &>/dev/null; then
-    echo "ERROR: Docker not found. Install Docker and re-run."
+    echo "ERROR: Docker not found."
+    echo ""
+    echo "Mac:   https://www.docker.com/products/docker-desktop/"
+    echo "Linux: curl -fsSL https://get.docker.com | sh"
     exit 1
 fi
 if ! docker info &>/dev/null 2>&1; then
-    echo "ERROR: Docker daemon not running. Start Docker and re-run."
+    echo "ERROR: Docker is not running."
+    echo "Open Docker Desktop and wait for it to start, then run this again."
     exit 1
 fi
 
 # Auto-create .env from template if missing
 if [ ! -f .env ]; then
     cp .env.example .env
-    echo "INFO: .env created from template — edit it if you want email notifications."
+    echo "INFO: .env created from template."
     echo ""
 fi
 
@@ -29,10 +33,16 @@ echo "Building PropScan (first run ~5-10 min, after that <30 sec)..."
 echo ""
 docker compose up -d --build
 
-# Determine access URL
-IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
+# Read port from .env (default 4823)
 PORT_VAL=$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2 | tr -d ' ')
-PORT_VAL=${PORT_VAL:-8000}
+PORT_VAL=${PORT_VAL:-4823}
+
+# Detect OS for correct IP
+if [[ "$(uname)" == "Darwin" ]]; then
+    IP="localhost"
+else
+    IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
+fi
 
 echo ""
 echo "Waiting for PropScan to be ready..."
@@ -48,6 +58,10 @@ for i in $(seq 1 40); do
         echo "To stop:    docker compose down"
         echo "To restart: bash start.sh"
         echo "To logs:    docker compose logs -f"
+        # Auto-open browser on Mac
+        if [[ "$(uname)" == "Darwin" ]]; then
+            open "http://localhost:$PORT_VAL"
+        fi
         exit 0
     fi
     printf "."
