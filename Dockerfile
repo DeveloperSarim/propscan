@@ -6,19 +6,17 @@ RUN npm ci --quiet
 COPY frontend/ ./
 RUN npm run build
 
-# ── Stage 2: Python backend + Playwright ─────────────────────────────────────
-FROM python:3.11-slim
+# ── Stage 2: Official Playwright image (Chromium + all deps pre-installed) ────
+# Version matches playwright==1.44.0 in requirements.txt
+FROM mcr.microsoft.com/playwright/python:v1.44.0-jammy
 WORKDIR /app
 
-# setuptools must come before requirements (playwright-stealth needs pkg_resources)
+# setuptools needed by playwright-stealth (pkg_resources)
 RUN pip install --no-cache-dir setuptools
 
 # Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Playwright Chromium + all system deps in one step
-RUN playwright install --with-deps chromium
 
 # App source
 COPY . .
