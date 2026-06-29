@@ -281,41 +281,51 @@ class WasaltScraper(BaseScraper):
 
         logger.info("[wasalt] Fetching %s (max_pages=%d)", base_url, max_pages)
 
-        async with AsyncSession(impersonate="safari15_3") as session:
-            # ── Page 1 — also gives us totalPages ────────────────────────
+        # Probe impersonations until one works (Docker/Linux may need chrome instead of safari)
+        _IMPERSONATIONS = ["safari15_3", "chrome120", "chrome124", "safari17_0"]
+        working_imp = "safari15_3"
+        r1 = None
+        for imp in _IMPERSONATIONS:
             try:
-                r1 = await session.get(base_url, headers=hdrs, timeout=20)
+                async with AsyncSession(impersonate=imp) as s:
+                    r1 = await s.get(base_url, headers=hdrs, timeout=45)
+                if r1.status_code == 200:
+                    working_imp = imp
+                    break
+                logger.warning("[wasalt] %s → HTTP %d", imp, r1.status_code)
+                r1 = None
             except Exception as exc:
-                logger.error("[wasalt] page 1 fetch error: %s", exc)
-                return []
+                logger.warning("[wasalt] %s failed: %s", imp, exc)
+                r1 = None
 
-            if r1.status_code != 200:
-                logger.error("[wasalt] HTTP %d on page 1", r1.status_code)
-                return []
+        if r1 is None:
+            logger.error("[wasalt] page 1 failed with all impersonations")
+            return []
 
-            m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r1.text, re.S)
-            if not m:
-                logger.error("[wasalt] no __NEXT_DATA__ on page 1")
-                return []
+        m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r1.text, re.S)
+        if not m:
+            logger.error("[wasalt] no __NEXT_DATA__ on page 1")
+            return []
 
-            data0       = json.loads(m.group(1))
-            sr0         = data0.get("props", {}).get("pageProps", {}).get("searchResult", {})
-            props0      = sr0.get("properties", []) if isinstance(sr0, dict) else []
-            total_pages = int(sr0.get("totalPages") or 1)
-            total_pages = min(total_pages, max_pages, 400)
+        data0       = json.loads(m.group(1))
+        sr0         = data0.get("props", {}).get("pageProps", {}).get("searchResult", {})
+        props0      = sr0.get("properties", []) if isinstance(sr0, dict) else []
+        total_pages = int(sr0.get("totalPages") or 1)
+        total_pages = min(total_pages, max_pages, 400)
 
-            logger.info("[wasalt] %s total listings, %d pages",
-                        sr0.get("count", "?"), total_pages)
+        logger.info("[wasalt] %s total listings, %d pages (using %s)",
+                    sr0.get("count", "?"), total_pages, working_imp)
 
-            for prop in self._parse_wasalt_props(props0, seen_ids, purpose, city_slug, request):
-                properties.append(prop)
+        for prop in self._parse_wasalt_props(props0, seen_ids, purpose, city_slug, request):
+            properties.append(prop)
 
-            # ── Remaining pages in parallel batches of 20 ────────────────
-            BATCH = 20
+        # ── Remaining pages in parallel batches of 20 ────────────────
+        BATCH = 20
+        async with AsyncSession(impersonate=working_imp) as session:
             for batch_start in range(2, total_pages + 1, BATCH):
                 batch_end = min(batch_start + BATCH, total_pages + 1)
                 tasks = [
-                    session.get(f"{base_url}&page={pg}", headers=hdrs, timeout=20)
+                    session.get(f"{base_url}&page={pg}", headers=hdrs, timeout=45)
                     for pg in range(batch_start, batch_end)
                 ]
                 responses = await asyncio.gather(*tasks, return_exceptions=True)

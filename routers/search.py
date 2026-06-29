@@ -64,9 +64,12 @@ def _dedup_cross_platform(unified: List[dict]) -> List[dict]:
     result: List[dict] = []
     removed = 0
     for group in groups.values():
-        if len(group) == 1:
-            result.append(group[0])
+        platforms_in_group = {p.get("platform") for p in group}
+        if len(platforms_in_group) == 1:
+            # All from same platform — keep every listing (different properties can share specs)
+            result.extend(group)
         else:
+            # Same property on multiple platforms — keep the best one
             best = max(group, key=_score)
             result.append(best)
             removed += len(group) - 1
