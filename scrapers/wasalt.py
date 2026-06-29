@@ -487,7 +487,7 @@ class WasaltScraper(BaseScraper):
                 rooms=beds,
                 bathrooms=baths,
                 city=request.city,
-                area=request.area,
+                area=(pi.get("district") or p.get("district") or p.get("zone") or request.area),
                 location=str(ld) if ld else None,
                 latitude=lat,
                 longitude=lng,

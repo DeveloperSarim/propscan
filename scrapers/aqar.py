@@ -543,8 +543,11 @@ async () => {{
             try:
                 city_str   = (request.city or "riyadh").strip().lower()
                 pt         = (request.property_type or "").strip().lower()
-                # Sub-regions only for generic (no property_type) searches
-                subregions = _SUBREGIONS.get(city_str, []) if not pt else []
+                # Sub-regions only when no area filter and no property_type
+                # (area filter means we already have a specific URL — sub-regions
+                # would pollute results with listings from the whole city)
+                use_subregions = not pt and not request.area
+                subregions = _SUBREGIONS.get(city_str, []) if use_subregions else []
 
                 url_bases = [city_base] + [
                     f"{BASE}/{quote('عقارات')}/{quote(sr)}" for sr in subregions
@@ -667,6 +670,16 @@ async () => {{
         listing_url = f"{BASE}{path}" if path else None
         listing_id  = str(item.get("id", "")) or None
 
+        # Extract actual city from URL path (e.g. /en/apt-for-rent/jeddah/al-rawdah/...)
+        # and reject listings that belong to a different city than what was searched.
+        # Only applies to English-format paths (/en/...) to avoid false-filtering Arabic paths.
+        path_parts = [p for p in path.split("/") if p]
+        city_str_req = (request.city or "riyadh").strip().lower()
+        if path.startswith("/en/") and len(path_parts) >= 3:
+            path_city = path_parts[2].lower()
+            if path_city and city_str_req and path_city != city_str_req:
+                return None  # Wrong city — discard
+
         main_img = item.get("mainImage") or (item.get("imgs") or [None])[0]
         images = [f"https://images.aqar.fm/webp/750x0/props/{main_img}"] if main_img else []
 
@@ -699,6 +712,14 @@ async () => {{
             name=b_name, agency=b_agency, agency_logo=b_photo, profile_url=b_url
         ) if (b_name or b_agency) else None
 
+        # Parse actual city/area from English path: /en/{type}/{city}/{area}/{slug}
+        actual_city = city_str_req
+        actual_area = request.area or ""
+        if path.startswith("/en/") and len(path_parts) >= 3:
+            actual_city = path_parts[2].lower()
+            if len(path_parts) >= 5:  # has area segment
+                actual_area = path_parts[3]
+
         return Property(
             id=listing_id,
             platform=self.platform_name,
@@ -710,8 +731,8 @@ async () => {{
             size_sqm=area_m2,
             rooms=beds,
             bathrooms=wc,
-            city=request.city,
-            area=request.area,
+            city=actual_city,
+            area=actual_area or request.area,
             location=location_str,
             latitude=float(lat) if lat is not None else None,
             longitude=float(lng) if lng is not None else None,

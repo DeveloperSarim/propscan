@@ -421,6 +421,13 @@ class BayutScraper(BaseScraper):
         price = h.get("price")
         area  = h.get("area")
 
+        # Extract actual district/area from Bayut location hierarchy (level ≥ 2)
+        actual_area = None
+        for loc in loc_list:
+            if isinstance(loc, dict) and (loc.get("level") or 0) >= 2:
+                actual_area = loc.get("slug") or None
+                break
+
         return Property(
             id=ext_id or None,
             platform=self.platform_name,
@@ -434,7 +441,7 @@ class BayutScraper(BaseScraper):
             rooms=rooms,
             bathrooms=baths,
             city=request.city,
-            area=request.area,
+            area=actual_area or request.area,
             location=location_str,
             latitude=float(lat) if lat is not None else None,
             longitude=float(lng) if lng is not None else None,
