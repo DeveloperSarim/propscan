@@ -13,13 +13,16 @@ from playwright.async_api import (
     Playwright,
 )
 try:
-    from playwright_stealth import stealth_async
-    _stealth_fn = stealth_async
-except ImportError:
-    from playwright_stealth import Stealth as _StealthClass
-    _stealth_instance = _StealthClass()
-    async def _stealth_fn(page):  # type: ignore[misc]
-        await _stealth_instance.apply_stealth_async(page)
+    from playwright_stealth import stealth_async as _stealth_fn  # type: ignore[assignment]
+except Exception:
+    try:
+        from playwright_stealth import Stealth as _StealthClass
+        _stealth_instance = _StealthClass()
+        async def _stealth_fn(page):  # type: ignore[misc]
+            await _stealth_instance.apply_stealth_async(page)
+    except Exception:
+        async def _stealth_fn(page):  # type: ignore[misc]
+            pass  # stealth unavailable — pkg_resources missing, install setuptools
 
 from config import settings
 from models.property import City, Area, PropertyType, Property
