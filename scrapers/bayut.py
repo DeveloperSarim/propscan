@@ -252,11 +252,13 @@ class BayutScraper(BaseScraper):
         city_str  = (request.city or "riyadh").strip().lower()
         city_slug = _CITY_SLUGS_MAP.get(city_str, f"/{city_str.replace(' ', '-')}")
 
-        # Only filter by city via Algolia — area is applied client-side in
-        # _parse_hit_to_property because Bayut's Algolia district slugs use an
-        # unpredictable suffix format (e.g. "/jeddah/obhur-al-shamaliyah-district-jeddah")
-        # that doesn't reliably match our canonical area slugs.
+        # location.slug_l1 = English slug field in Bayut Algolia location objects.
+        # City filter: slug_l1:/jeddah  District filter: slug_l1:/jeddah/obhur-al-shamaliyah
         facet_filters = [[f"location.slug_l1:{city_slug}"]]
+        if request.area:
+            area_slug = request.area.lower().strip().replace(" ", "-")
+            # AND filter: separate inner list means AND with city filter
+            facet_filters.append([f"location.slug_l1:{city_slug}/{area_slug}"])
 
         filters = f"purpose:{purpose}"
         if pt:

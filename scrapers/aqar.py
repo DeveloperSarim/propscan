@@ -696,12 +696,29 @@ async () => {{
         elif "شهري" in period_text:
             price_period = "monthly"
 
+        item_district_ar = str(item.get("district") or "").strip()
         location_str = (
             item.get("address_text")
-            or item.get("district")
+            or item_district_ar
             or item.get("city")
             or request.city
         )
+
+        # Client-side area filter using Arabic district field.
+        # Normalize both sides: remove spaces/dashes, collapse alef variants.
+        if request.area and item_district_ar:
+            area_slug = request.area.lower().strip().replace(" ", "-")
+            area_ar = _AREAS_AR.get(area_slug, "")
+            if area_ar:
+                def _norm_ar(t: str) -> str:
+                    t = t.replace("-", "").replace(" ", "")
+                    t = re.sub(r"[أإآ]", "ا", t)   # normalize alef hamza variants
+                    t = t.replace("ة", "ه")           # normalize taa marbuta
+                    return t
+                needle = _norm_ar(area_ar)
+                haystack = _norm_ar(item_district_ar)
+                if needle not in haystack and haystack not in needle:
+                    return None  # Wrong district
 
         user_obj = item.get("user") or {}
         user_id  = item.get("user_id") or ""
