@@ -23,20 +23,12 @@ from curl_cffi.requests import AsyncSession
 from data.areas import get_static_areas
 from models.property import City, Area, PropertyType, Property, Broker
 from models.search import SearchRequest
+from scrapers.area_match import area_matches as _area_matches
 from scrapers.base import BaseScraper
 
 logger = logging.getLogger(__name__)
 
 BASE = "https://www.propertyfinder.sa"
-
-
-def _norm_en(t: str) -> str:
-    """Normalize an English area name/slug for fuzzy comparison."""
-    t = (t or "").lower()
-    t = re.sub(r"[^a-z0-9]", "", t)
-    if t.startswith("al"):
-        t = t[2:]
-    return t
 
 _CITIES_FALLBACK = [
     {"id": "1", "name": "Riyadh", "name_ar": "الرياض", "slug": "riyadh"},
@@ -477,12 +469,17 @@ class PropertyFinderScraper(BaseScraper):
             loc_obj = p.get("location") or {}
             location_str = loc_obj.get("full_name") or request.city or ""
 
-            # Area guard: keep only listings whose location mentions the district.
-            if request.area:
-                needle = _norm_en(request.area)
-                hay = _norm_en(location_str)
-                if needle and needle not in hay:
+            # City guard: PF's free-text `q` doesn't reliably filter by city
+            # (it returns Riyadh-heavy defaults), so drop any listing whose
+            # location doesn't mention the requested city.
+            if request.city:
+                city_norm = request.city.lower().replace("-", " ").strip()
+                if city_norm and city_norm not in location_str.lower():
                     continue
+
+            # Area guard: keep only listings whose location mentions the district.
+            if request.area and not _area_matches(request.area, location_str):
+                continue
 
             coords = loc_obj.get("coordinates") or {}
             lat: Optional[float] = None

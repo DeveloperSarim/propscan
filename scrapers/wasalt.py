@@ -20,22 +20,13 @@ from curl_cffi.requests import AsyncSession
 from data.areas import get_static_areas
 from models.property import City, Area, PropertyType, Property, Broker
 from models.search import SearchRequest
+from scrapers.area_match import area_matches as _area_matches
 from scrapers.base import BaseScraper
 
 logger = logging.getLogger(__name__)
 
 BASE         = "https://wasalt.sa"
 _IMG_CDN     = "https://imagedelivery.net/1DNKFJPRaeUdy_j8F7HT3w/production/properties"
-
-
-def _norm_en(t: str) -> str:
-    """Normalize an English district name/slug for fuzzy comparison:
-    lowercase, strip the leading 'al' article, drop separators & non-alnum."""
-    t = (t or "").lower()
-    t = re.sub(r"[^a-z0-9]", "", t)   # remove spaces, dashes, punctuation
-    if t.startswith("al"):
-        t = t[2:]                      # 'Al Rawdah'/'Rawdah' both → 'rawdah'
-    return t
 
 # ── Property type → URL slug ──────────────────────────────────────────────────
 _TYPES: dict = {
@@ -497,11 +488,8 @@ class WasaltScraper(BaseScraper):
             prop_district = (
                 pi.get("district") or p.get("district") or p.get("zone") or ""
             )
-            if request.area:
-                needle = _norm_en(request.area)
-                hay = _norm_en(str(prop_district))
-                if not hay or (needle not in hay and hay not in needle):
-                    continue  # Different district — skip
+            if request.area and not _area_matches(request.area, str(prop_district)):
+                continue  # Different district — skip
 
             results.append(Property(
                 id=prop_id,
