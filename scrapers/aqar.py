@@ -670,15 +670,21 @@ async () => {{
         listing_url = f"{BASE}{path}" if path else None
         listing_id  = str(item.get("id", "")) or None
 
-        # Extract actual city from URL path (e.g. /en/apt-for-rent/jeddah/al-rawdah/...)
-        # and reject listings that belong to a different city than what was searched.
-        # Only applies to English-format paths (/en/...) to avoid false-filtering Arabic paths.
+        # Reject listings that belong to a different city than what was searched.
+        # Check English path first, then fall back to the item's "city" field (Arabic).
         path_parts = [p for p in path.split("/") if p]
         city_str_req = (request.city or "riyadh").strip().lower()
+        expected_ar = _CITIES_AR.get(city_str_req, "")
         if path.startswith("/en/") and len(path_parts) >= 3:
             path_city = path_parts[2].lower()
             if path_city and city_str_req and path_city != city_str_req:
-                return None  # Wrong city — discard
+                return None  # Wrong city — discard (English path)
+        else:
+            # Arabic-path: use the "city" field from the RSC item
+            item_city_ar = str(item.get("city") or "").strip().replace("-", "")
+            expected_ar_norm = expected_ar.replace("-", "")
+            if item_city_ar and expected_ar_norm and item_city_ar != expected_ar_norm:
+                return None  # Wrong city — discard (Arabic path)
 
         main_img = item.get("mainImage") or (item.get("imgs") or [None])[0]
         images = [f"https://images.aqar.fm/webp/750x0/props/{main_img}"] if main_img else []
@@ -713,12 +719,18 @@ async () => {{
         ) if (b_name or b_agency) else None
 
         # Parse actual city/area from English path: /en/{type}/{city}/{area}/{slug}
+        # If area filter is active, reject English-path properties from wrong areas.
         actual_city = city_str_req
         actual_area = request.area or ""
         if path.startswith("/en/") and len(path_parts) >= 3:
             actual_city = path_parts[2].lower()
-            if len(path_parts) >= 5:  # has area segment
+            if len(path_parts) >= 5:  # has area segment in path
                 actual_area = path_parts[3]
+                if request.area:
+                    needle = request.area.lower().replace("-", " ")
+                    path_area = actual_area.lower().replace("-", " ")
+                    if needle not in path_area and path_area not in needle:
+                        return None  # Wrong area
 
         return Property(
             id=listing_id,

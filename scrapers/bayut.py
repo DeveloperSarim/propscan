@@ -252,13 +252,11 @@ class BayutScraper(BaseScraper):
         city_str  = (request.city or "riyadh").strip().lower()
         city_slug = _CITY_SLUGS_MAP.get(city_str, f"/{city_str.replace(' ', '-')}")
 
-        # Each inner list = AND; items within a list = OR
-        city_facet = [f"location.slug_l1:{city_slug}"]
-        facet_filters = [city_facet]
-        if request.area:
-            area_slug = request.area.lower().strip().replace(" ", "-")
-            # Separate list → AND (not OR) with city filter
-            facet_filters.append([f"location.slug_l2:{city_slug}/{area_slug}"])
+        # Only filter by city via Algolia — area is applied client-side in
+        # _parse_hit_to_property because Bayut's Algolia district slugs use an
+        # unpredictable suffix format (e.g. "/jeddah/obhur-al-shamaliyah-district-jeddah")
+        # that doesn't reliably match our canonical area slugs.
+        facet_filters = [[f"location.slug_l1:{city_slug}"]]
 
         filters = f"purpose:{purpose}"
         if pt:
@@ -370,6 +368,28 @@ class BayutScraper(BaseScraper):
             x.get("name_l1", "") for x in loc_list
             if isinstance(x, dict) and x.get("name_l1")
         ).strip(" › ") or request.city
+
+        # Client-side area filter: check if any location entry matches the requested area.
+        # Bayut's Algolia district slugs have unpredictable suffixes so we can't filter
+        # server-side reliably — fuzzy-match on name_l1 and slug_l1 instead.
+        if request.area:
+            needle = request.area.lower().replace("-", " ").replace("_", " ").strip()
+            area_matched = False
+            for loc in loc_list:
+                if not isinstance(loc, dict):
+                    continue
+                name = (loc.get("name_l1") or "").lower().replace("-", " ")
+                slug = (loc.get("slug_l1") or "").lower()
+                slug_tail = slug.split("/")[-1].replace("-", " ") if "/" in slug else slug.replace("-", " ")
+                # Strip common Bayut suffix "-district-cityname" for comparison
+                slug_tail = slug_tail.replace("district", "").strip()
+                name_clean = name.replace("district", "").strip()
+                if (needle in name_clean or name_clean in needle or
+                        needle in slug_tail or slug_tail in needle):
+                    area_matched = True
+                    break
+            if not area_matched:
+                return None
 
         ext_id      = h.get("externalID", "")
         listing_url = f"{BASE}/property/details-{ext_id}.html" if ext_id else None
