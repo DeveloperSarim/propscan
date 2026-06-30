@@ -575,7 +575,7 @@ async () => {{
                 # beds segment separately (only 150-300 pages each) covers those
                 # missing listings since beds is a server-side Aqar filter.
                 _SEGMENT_CITIES = {"jeddah", "riyadh", "dammam", "khobar", "al khobar"}
-                if not pt and request.rooms is None and city_str in _SEGMENT_CITIES:
+                if not pt and not request.area and request.rooms is None and city_str in _SEGMENT_CITIES:
                     for beds_n in range(1, 7):
                         beds_qs = f"?beds={beds_n}"
                         try:

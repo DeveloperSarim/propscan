@@ -474,6 +474,8 @@ class WasaltScraper(BaseScraper):
 
             if request.rooms is not None and beds is not None and beds != request.rooms:
                 continue
+            if request.bathrooms is not None and baths is not None and baths != request.bathrooms:
+                continue
 
             results.append(Property(
                 id=prop_id,

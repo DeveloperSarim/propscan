@@ -247,24 +247,31 @@ class BayutScraper(BaseScraper):
         logger.info("[bayut] Algolia search (max_pages=%d)", max_pages)
 
         purpose  = "for-sale" if request.purpose == "for-sale" else "for-rent"
-        pt       = (request.property_type or "apartment").lower()
-        cat_slug = _CAT_SLUGS.get(pt, "apartments")
+        pt       = (request.property_type or "").lower()
 
         city_str  = (request.city or "riyadh").strip().lower()
         city_slug = _CITY_SLUGS_MAP.get(city_str, f"/{city_str.replace(' ', '-')}")
 
-        facet_filter = [f"location.slug_l1:{city_slug}"]
+        # Each inner list = AND; items within a list = OR
+        city_facet = [f"location.slug_l1:{city_slug}"]
+        facet_filters = [city_facet]
         if request.area:
             area_slug = request.area.lower().strip().replace(" ", "-")
-            facet_filter.append(f"location.slug_l2:{city_slug}/{area_slug}")
+            # Separate list → AND (not OR) with city filter
+            facet_filters.append([f"location.slug_l2:{city_slug}/{area_slug}"])
 
-        filters = f"purpose:{purpose} AND category.slug_l1:{cat_slug}"
+        filters = f"purpose:{purpose}"
+        if pt:
+            cat_slug = _CAT_SLUGS.get(pt, pt)
+            filters += f" AND category.slug_l1:{cat_slug}"
         if request.price_min is not None:
             filters += f" AND price>={int(request.price_min)}"
         if request.price_max is not None:
             filters += f" AND price<={int(request.price_max)}"
         if request.rooms is not None:
             filters += f" AND rooms={request.rooms}"
+        if request.bathrooms is not None:
+            filters += f" AND baths={request.bathrooms}"
         if request.size_min is not None:
             filters += f" AND area>={int(request.size_min)}"
         if request.size_max is not None:
@@ -282,7 +289,7 @@ class BayutScraper(BaseScraper):
             return {
                 "query":        "",
                 "filters":      filters,
-                "facetFilters": [facet_filter],
+                "facetFilters": facet_filters,
                 "hitsPerPage":  100,
                 "page":         page,
                 "attributesToRetrieve": [
