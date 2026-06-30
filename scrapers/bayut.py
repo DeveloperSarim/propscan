@@ -498,12 +498,16 @@ class BayutScraper(BaseScraper):
         price = h.get("price")
         area  = h.get("area")
 
-        # Extract actual district/area from Bayut location hierarchy (level ≥ 2)
+        # District name = the deepest location entry's English name (e.g.
+        # "Obhur Al Shamaliyah"), not the Arabic zone slug.
         actual_area = None
+        deepest_level = -1
         for loc in loc_list:
-            if isinstance(loc, dict) and (loc.get("level") or 0) >= 2:
-                actual_area = loc.get("slug") or None
-                break
+            if isinstance(loc, dict):
+                lvl = loc.get("level") or 0
+                if lvl >= 2 and lvl > deepest_level and loc.get("name_l1"):
+                    deepest_level = lvl
+                    actual_area = loc.get("name_l1")
 
         return Property(
             id=ext_id or None,
