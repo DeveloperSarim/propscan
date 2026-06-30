@@ -306,17 +306,32 @@ class BayutScraper(BaseScraper):
         all_hits: List[dict] = []
         limits = httpx.Limits(max_connections=50, max_keepalive_connections=20)
         async with httpx.AsyncClient(timeout=30, limits=limits) as client:
-            probe_data = None
-            for attempt in range(3):
-                try:
-                    r = await client.post(_ALGOLIA_URL, json=_payload(0), headers=_hdrs)
-                    if r.status_code == 200:
-                        probe_data = r.json()
-                        break
-                    logger.warning("[bayut] Algolia attempt %d: HTTP %d", attempt + 1, r.status_code)
-                except Exception as exc:
-                    logger.warning("[bayut] Algolia attempt %d: %s", attempt + 1, exc)
-                    await asyncio.sleep(2)
+
+            async def _probe(payload_fn) -> Optional[dict]:
+                for attempt in range(3):
+                    try:
+                        r = await client.post(_ALGOLIA_URL, json=payload_fn(0), headers=_hdrs)
+                        if r.status_code == 200:
+                            return r.json()
+                        logger.warning("[bayut] Algolia attempt %d: HTTP %d", attempt + 1, r.status_code)
+                    except Exception as exc:
+                        logger.warning("[bayut] Algolia attempt %d: %s", attempt + 1, exc)
+                        await asyncio.sleep(2)
+                return None
+
+            probe_data = await _probe(_payload)
+
+            # If area filter returned 0 hits, Bayut may use a different slug format.
+            # Retry without area filter so we at least get city-level results,
+            # then let the client-side name fuzzy-match in _parse_hit_to_property filter.
+            if probe_data and probe_data.get("nbHits", 0) == 0 and request.area:
+                logger.warning("[bayut] 0 hits with area slug — retrying without area filter")
+                city_only_filters = [[f"location.slug_l1:{city_slug}"]]
+                def _payload_no_area(page: int) -> dict:
+                    p = _payload(page)
+                    p["facetFilters"] = city_only_filters
+                    return p
+                probe_data = await _probe(_payload_no_area)
 
             if not probe_data:
                 logger.error("[bayut] All Algolia probe attempts failed")
