@@ -111,6 +111,19 @@ _AREAS_AR: dict = {
     "al-qirawan": "القيروان",     "diplomatic-quarter": "الحي-الدبلوماسي",
 }
 
+def _norm_ar(t: str) -> str:
+    """Normalize an Arabic district string for fuzzy comparison.
+    Strips the حي ('district') prefix, separators, and collapses alef/hamza,
+    taa-marbuta and alef-maksura spelling variants."""
+    if not t:
+        return ""
+    t = t.replace("حي", "")
+    t = re.sub(r"[أإآ]", "ا", t)
+    t = t.replace("ة", "ه").replace("ى", "ي")
+    t = re.sub(r"[\s\-_]", "", t)
+    return t.strip()
+
+
 # ── Sub-regions: scraped in addition to the main city URL for more results ────
 _SUBREGIONS: dict = {
     "jeddah": ["شمال-جدة", "جنوب-جدة", "شرق-جدة", "غرب-جدة", "وسط-جدة"],
@@ -356,12 +369,17 @@ async () => {{
         if request.bathrooms is not None:
             qs_parts.append(f"wc={int(request.bathrooms)}")
         qs        = ("?" + "&".join(qs_parts)) if qs_parts else ""
+        # NOTE: we deliberately do NOT append the district to the URL path.
+        # Aqar's district-specific paths trigger a Cloudflare challenge (429),
+        # while the generic city URL passes. Area filtering is applied
+        # client-side in _parse_item() against the district field instead.
         city_base = f"{BASE}/{quote(cat_slug)}/{quote(city_ar)}"
-        if request.area:
-            area_slug = request.area.lower().strip().replace(" ", "-")
-            area_ar = _AREAS_AR.get(area_slug, area_slug)
-            city_base = f"{city_base}/{quote(area_ar)}"
-        cache_key = f"{city_str}:{cat_slug}:{request.area or ''}:{qs}"
+        # Cache key omits the specific district (filtering happens at parse time),
+        # but DOES distinguish area-mode from generic-mode because they fetch
+        # different page depths (capped 300 vs full 2000). All district searches
+        # of a city thus share one capped fetch; generic keeps its own full fetch.
+        mode = "area" if request.area else "full"
+        cache_key = f"{city_str}:{cat_slug}:{qs}:{mode}"
         return city_base, qs, cache_key
 
     async def _make_sessions(self):
@@ -407,15 +425,17 @@ async () => {{
 
         return sessions, _get
 
-    async def _fetch_url_pages(self, base_url: str, qs: str, _get) -> List[dict]:
-        """Fetch ALL pages for a URL in chunks with retry passes. Returns raw item dicts."""
+    async def _fetch_url_pages(self, base_url: str, qs: str, _get, cap: int = 2000) -> List[dict]:
+        """Fetch pages for a URL in chunks with retry passes. Returns raw item dicts.
+        `cap` bounds the number of pages (lower for area searches, which filter
+        client-side and don't need the full multi-thousand-page city dump)."""
         r0 = await _get(f"{base_url}{qs}")
         if r0 is None:
             logger.warning("[aqar] probe failed: %s", base_url)
             return []
 
         items0 = _extract_listings(r0.text)
-        pages  = _total_pages(r0.text, cap=2000)
+        pages  = _total_pages(r0.text, cap=cap)
         all_raw: List[dict] = list(items0)
         logger.info("[aqar] %s → %d pages, %d p1 items", base_url, pages, len(items0))
 
@@ -543,10 +563,14 @@ async () => {{
             try:
                 city_str   = (request.city or "riyadh").strip().lower()
                 pt         = (request.property_type or "").strip().lower()
-                # Sub-regions only when no area filter and no property_type
-                # (area filter means we already have a specific URL — sub-regions
-                # would pollute results with listings from the whole city)
-                use_subregions = not pt and not request.area
+                area_mode  = bool(request.area)
+                # In area mode we filter client-side, so we don't need the full
+                # multi-thousand-page city dump — a capped recency-sorted sample
+                # contains plenty of the target district and keeps the search fast.
+                page_cap = 300 if area_mode else 2000
+                # Sub-regions / beds-segmentation multiply the fetch for full city
+                # coverage; skip them in area mode (the cap + client filter suffice).
+                use_subregions = not pt and not area_mode
                 subregions = _SUBREGIONS.get(city_str, []) if use_subregions else []
 
                 url_bases = [city_base] + [
@@ -560,7 +584,7 @@ async () => {{
                 all_raw: List[dict] = []
                 for label, base in zip(labels, url_bases):
                     try:
-                        result = await self._fetch_url_pages(base, qs, _get)
+                        result = await self._fetch_url_pages(base, qs, _get, cap=page_cap)
                         all_raw.extend(result)
                         logger.info(
                             "[aqar] %s → %d items (running total: %d)",
@@ -575,7 +599,7 @@ async () => {{
                 # beds segment separately (only 150-300 pages each) covers those
                 # missing listings since beds is a server-side Aqar filter.
                 _SEGMENT_CITIES = {"jeddah", "riyadh", "dammam", "khobar", "al khobar"}
-                if not pt and not request.area and request.rooms is None and city_str in _SEGMENT_CITIES:
+                if not pt and not area_mode and request.rooms is None and city_str in _SEGMENT_CITIES:
                     for beds_n in range(1, 7):
                         beds_qs = f"?beds={beds_n}"
                         try:
@@ -670,21 +694,32 @@ async () => {{
         listing_url = f"{BASE}{path}" if path else None
         listing_id  = str(item.get("id", "")) or None
 
-        # Reject listings that belong to a different city than what was searched.
-        # Check English path first, then fall back to the item's "city" field (Arabic).
         path_parts = [p for p in path.split("/") if p]
         city_str_req = (request.city or "riyadh").strip().lower()
         expected_ar = _CITIES_AR.get(city_str_req, "")
+        item_district_ar = str(item.get("district") or "").strip()
+
+        # ── City guard: reject listings from a different city ──────────────────
         if path.startswith("/en/") and len(path_parts) >= 3:
             path_city = path_parts[2].lower()
             if path_city and city_str_req and path_city != city_str_req:
-                return None  # Wrong city — discard (English path)
+                return None  # Wrong city (English path)
         else:
-            # Arabic-path: use the "city" field from the RSC item
-            item_city_ar = str(item.get("city") or "").strip().replace("-", "")
-            expected_ar_norm = expected_ar.replace("-", "")
-            if item_city_ar and expected_ar_norm and item_city_ar != expected_ar_norm:
-                return None  # Wrong city — discard (Arabic path)
+            item_city_ar = _norm_ar(str(item.get("city") or ""))
+            if item_city_ar and expected_ar and item_city_ar != _norm_ar(expected_ar):
+                return None  # Wrong city (Arabic path)
+
+        # ── Area guard: client-side district filter ────────────────────────────
+        # Aqar blocks district URL paths (Cloudflare), so we fetch the whole city
+        # and keep only listings whose district matches the requested area.
+        if request.area:
+            area_slug = request.area.lower().strip().replace(" ", "-")
+            area_ar = _AREAS_AR.get(area_slug)
+            if area_ar:  # only filter when we have a known Arabic name for the slug
+                needle = _norm_ar(area_ar)
+                hay = _norm_ar(item_district_ar)
+                if not hay or (needle not in hay and hay not in needle):
+                    return None  # Different district — discard
 
         main_img = item.get("mainImage") or (item.get("imgs") or [None])[0]
         images = [f"https://images.aqar.fm/webp/750x0/props/{main_img}"] if main_img else []
@@ -696,7 +731,6 @@ async () => {{
         elif "شهري" in period_text:
             price_period = "monthly"
 
-        item_district_ar = str(item.get("district") or "").strip()
         location_str = (
             item.get("address_text")
             or item_district_ar
@@ -719,19 +753,12 @@ async () => {{
             name=b_name, agency=b_agency, agency_logo=b_photo, profile_url=b_url
         ) if (b_name or b_agency) else None
 
-        # Parse actual city/area from English path: /en/{type}/{city}/{area}/{slug}
-        # If area filter is active, reject English-path properties from wrong areas.
+        # City label from English path when available, else requested city.
         actual_city = city_str_req
-        actual_area = request.area or ""
         if path.startswith("/en/") and len(path_parts) >= 3:
             actual_city = path_parts[2].lower()
-            if len(path_parts) >= 5:  # has area segment in path
-                actual_area = path_parts[3]
-                if request.area:
-                    needle = request.area.lower().replace("-", " ")
-                    path_area = actual_area.lower().replace("-", " ")
-                    if needle not in path_area and path_area not in needle:
-                        return None  # Wrong area
+        # Area label = the property's own district (the real one), not the request.
+        actual_area = item_district_ar or request.area or ""
 
         return Property(
             id=listing_id,
@@ -745,7 +772,7 @@ async () => {{
             rooms=beds,
             bathrooms=wc,
             city=actual_city,
-            area=actual_area or request.area,
+            area=actual_area,
             location=location_str,
             latitude=float(lat) if lat is not None else None,
             longitude=float(lng) if lng is not None else None,

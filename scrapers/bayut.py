@@ -252,13 +252,13 @@ class BayutScraper(BaseScraper):
         city_str  = (request.city or "riyadh").strip().lower()
         city_slug = _CITY_SLUGS_MAP.get(city_str, f"/{city_str.replace(' ', '-')}")
 
-        # location.slug_l1 = English slug field in Bayut Algolia location objects.
-        # City filter: slug_l1:/jeddah  District filter: slug_l1:/jeddah/obhur-al-shamaliyah
-        facet_filters = [[f"location.slug_l1:{city_slug}"]]
-        if request.area:
-            area_slug = request.area.lower().strip().replace(" ", "-")
-            # AND filter: separate inner list means AND with city filter
-            facet_filters.append([f"location.slug_l1:{city_slug}/{area_slug}"])
+        # location.slug_l1 = English slug field in Bayut's location hierarchy.
+        # City lives at slug_l1:/jeddah, but districts nest under a ZONE:
+        #   /jeddah/north-jeddah/obhur-al-shamaliyah
+        # We can't know the zone up-front, so the full district slug is resolved
+        # at request time via _resolve_area_slug() (discovery query) below.
+        city_facet = [f"location.slug_l1:{city_slug}"]
+        area_facet: Optional[list] = None  # set after discovery if area requested
 
         filters = f"purpose:{purpose}"
         if pt:
@@ -286,10 +286,11 @@ class BayutScraper(BaseScraper):
         }
 
         def _payload(page: int) -> dict:
+            ffs = [city_facet] + ([area_facet] if area_facet else [])
             return {
                 "query":        "",
                 "filters":      filters,
-                "facetFilters": facet_filters,
+                "facetFilters": ffs,
                 "hitsPerPage":  100,
                 "page":         page,
                 "attributesToRetrieve": [
@@ -319,20 +320,22 @@ class BayutScraper(BaseScraper):
                         await asyncio.sleep(2)
                 return None
 
-            probe_data = await _probe(_payload)
-            active_payload = _payload  # track which payload function to use for pagination
+            # ── Resolve the full district slug (with zone) for the requested area ──
+            if request.area:
+                area_slug = request.area.lower().strip().replace(" ", "-")
+                full_slug = await self._resolve_area_slug(
+                    client, city_slug, area_slug, filters, _hdrs
+                )
+                if full_slug:
+                    area_facet = [f"location.slug_l1:{full_slug}"]
+                    logger.info("[bayut] area %r → %s (server-side filter)", area_slug, full_slug)
+                else:
+                    logger.warning(
+                        "[bayut] area %r not found in %s — falling back to client-side name match",
+                        area_slug, city_slug,
+                    )
 
-            # If area filter returned 0 hits, Bayut may use a different slug format.
-            # Fall back to city-only filter; client-side name fuzzy-match will filter by area.
-            if probe_data and probe_data.get("nbHits", 0) == 0 and request.area:
-                logger.warning("[bayut] 0 hits with area slug — retrying city-only + client-side filter")
-                city_only_ff = [[f"location.slug_l1:{city_slug}"]]
-                def _payload_city(page: int) -> dict:
-                    p = _payload(page)
-                    p["facetFilters"] = city_only_ff
-                    return p
-                probe_data = await _probe(_payload_city)
-                active_payload = _payload_city  # use city-only for all subsequent pages too
+            probe_data = await _probe(_payload)
 
             if not probe_data:
                 logger.error("[bayut] All Algolia probe attempts failed")
@@ -350,7 +353,7 @@ class BayutScraper(BaseScraper):
                 for batch_start in range(1, pages_needed, _BATCH):
                     batch_end = min(batch_start + _BATCH, pages_needed)
                     tasks = [
-                        client.post(_ALGOLIA_URL, json=active_payload(p), headers=_hdrs)
+                        client.post(_ALGOLIA_URL, json=_payload(p), headers=_hdrs)
                         for p in range(batch_start, batch_end)
                     ]
                     responses = await asyncio.gather(*tasks, return_exceptions=True)
@@ -375,6 +378,35 @@ class BayutScraper(BaseScraper):
     # ------------------------------------------------------------------ #
     #  Helpers                                                            #
     # ------------------------------------------------------------------ #
+
+    async def _resolve_area_slug(
+        self, client, city_slug: str, area_slug: str, filters: str, hdrs: dict,
+    ) -> Optional[str]:
+        """Discover the full Bayut district slug (which includes a zone segment,
+        e.g. /jeddah/north-jeddah/obhur-al-shamaliyah) for a bare area slug like
+        'obhur-al-shamaliyah'. Scans city-level hits for a location entry whose
+        slug ends with /{area_slug}. Returns the full slug, or None if not found."""
+        payload = {
+            "query":        "",
+            "filters":      filters,
+            "facetFilters": [[f"location.slug_l1:{city_slug}"]],
+            "hitsPerPage":  1000,
+            "page":         0,
+            "attributesToRetrieve": ["location"],
+        }
+        try:
+            r = await client.post(_ALGOLIA_URL, json=payload, headers=hdrs)
+            if r.status_code != 200:
+                return None
+            for h in r.json().get("hits", []):
+                for loc in h.get("location", []):
+                    if isinstance(loc, dict):
+                        s = loc.get("slug_l1", "")
+                        if s.endswith(f"/{area_slug}"):
+                            return s
+        except Exception as exc:
+            logger.warning("[bayut] area slug discovery failed: %s", exc)
+        return None
 
     def _parse_hit_to_property(self, h: dict, request: SearchRequest) -> Optional[Property]:
         title = h.get("title_l1") or h.get("title")

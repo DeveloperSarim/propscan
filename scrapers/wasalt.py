@@ -27,6 +27,16 @@ logger = logging.getLogger(__name__)
 BASE         = "https://wasalt.sa"
 _IMG_CDN     = "https://imagedelivery.net/1DNKFJPRaeUdy_j8F7HT3w/production/properties"
 
+
+def _norm_en(t: str) -> str:
+    """Normalize an English district name/slug for fuzzy comparison:
+    lowercase, strip the leading 'al' article, drop separators & non-alnum."""
+    t = (t or "").lower()
+    t = re.sub(r"[^a-z0-9]", "", t)   # remove spaces, dashes, punctuation
+    if t.startswith("al"):
+        t = t[2:]                      # 'Al Rawdah'/'Rawdah' both → 'rawdah'
+    return t
+
 # ── Property type → URL slug ──────────────────────────────────────────────────
 _TYPES: dict = {
     "apartment":   "apartments",
@@ -246,6 +256,11 @@ class WasaltScraper(BaseScraper):
 
     async def search_properties(self, request: SearchRequest) -> List[Property]:
         max_pages = getattr(request, "max_pages", 340)
+        # Area searches filter client-side (Wasalt's districtSlug param is ignored),
+        # so we sample a fixed slice of the city's pages — enough to surface the
+        # target district while keeping the request responsive (~30-40s).
+        if request.area:
+            max_pages = 25
 
         city_str = (request.city or "riyadh").strip().lower()
         city_slug = _CITY_SLUGS.get(city_str, city_str.replace(" ", "-"))
@@ -477,6 +492,17 @@ class WasaltScraper(BaseScraper):
             if request.bathrooms is not None and baths is not None and baths != request.bathrooms:
                 continue
 
+            # ── Area guard: Wasalt's districtSlug URL param doesn't filter, so we
+            #    match the property's own (English) district name client-side. ──
+            prop_district = (
+                pi.get("district") or p.get("district") or p.get("zone") or ""
+            )
+            if request.area:
+                needle = _norm_en(request.area)
+                hay = _norm_en(str(prop_district))
+                if not hay or (needle not in hay and hay not in needle):
+                    continue  # Different district — skip
+
             results.append(Property(
                 id=prop_id,
                 platform=self.platform_name,
@@ -489,7 +515,7 @@ class WasaltScraper(BaseScraper):
                 rooms=beds,
                 bathrooms=baths,
                 city=request.city,
-                area=(pi.get("district") or p.get("district") or p.get("zone") or request.area),
+                area=(prop_district or request.area),
                 location=str(ld) if ld else None,
                 latitude=lat,
                 longitude=lng,

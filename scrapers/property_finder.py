@@ -29,6 +29,15 @@ logger = logging.getLogger(__name__)
 
 BASE = "https://www.propertyfinder.sa"
 
+
+def _norm_en(t: str) -> str:
+    """Normalize an English area name/slug for fuzzy comparison."""
+    t = (t or "").lower()
+    t = re.sub(r"[^a-z0-9]", "", t)
+    if t.startswith("al"):
+        t = t[2:]
+    return t
+
 _CITIES_FALLBACK = [
     {"id": "1", "name": "Riyadh", "name_ar": "الرياض", "slug": "riyadh"},
     {"id": "2", "name": "Jeddah", "name_ar": "جدة", "slug": "jeddah"},
@@ -111,7 +120,10 @@ def _build_search_url(request: SearchRequest) -> str:
     if request.city:
         params["q"] = request.city
     if request.area:
-        params["q"] = f"{request.area}, {request.city or ''}".strip(", ")
+        # Convert slug → readable name for PF's text search ("obhur-al-shamaliyah"
+        # → "Obhur Al Shamaliyah") so the location query actually resolves.
+        area_name = request.area.replace("-", " ").replace("_", " ").title()
+        params["q"] = f"{area_name}, {request.city or ''}".strip(", ")
 
     if request.price_min is not None:
         params["pf"] = int(request.price_min)
@@ -464,6 +476,14 @@ class PropertyFinderScraper(BaseScraper):
 
             loc_obj = p.get("location") or {}
             location_str = loc_obj.get("full_name") or request.city or ""
+
+            # Area guard: keep only listings whose location mentions the district.
+            if request.area:
+                needle = _norm_en(request.area)
+                hay = _norm_en(location_str)
+                if needle and needle not in hay:
+                    continue
+
             coords = loc_obj.get("coordinates") or {}
             lat: Optional[float] = None
             lng: Optional[float] = None
