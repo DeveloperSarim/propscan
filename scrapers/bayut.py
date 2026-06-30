@@ -320,18 +320,19 @@ class BayutScraper(BaseScraper):
                 return None
 
             probe_data = await _probe(_payload)
+            active_payload = _payload  # track which payload function to use for pagination
 
             # If area filter returned 0 hits, Bayut may use a different slug format.
-            # Retry without area filter so we at least get city-level results,
-            # then let the client-side name fuzzy-match in _parse_hit_to_property filter.
+            # Fall back to city-only filter; client-side name fuzzy-match will filter by area.
             if probe_data and probe_data.get("nbHits", 0) == 0 and request.area:
-                logger.warning("[bayut] 0 hits with area slug — retrying without area filter")
-                city_only_filters = [[f"location.slug_l1:{city_slug}"]]
-                def _payload_no_area(page: int) -> dict:
+                logger.warning("[bayut] 0 hits with area slug — retrying city-only + client-side filter")
+                city_only_ff = [[f"location.slug_l1:{city_slug}"]]
+                def _payload_city(page: int) -> dict:
                     p = _payload(page)
-                    p["facetFilters"] = city_only_filters
+                    p["facetFilters"] = city_only_ff
                     return p
-                probe_data = await _probe(_payload_no_area)
+                probe_data = await _probe(_payload_city)
+                active_payload = _payload_city  # use city-only for all subsequent pages too
 
             if not probe_data:
                 logger.error("[bayut] All Algolia probe attempts failed")
@@ -349,7 +350,7 @@ class BayutScraper(BaseScraper):
                 for batch_start in range(1, pages_needed, _BATCH):
                     batch_end = min(batch_start + _BATCH, pages_needed)
                     tasks = [
-                        client.post(_ALGOLIA_URL, json=_payload(p), headers=_hdrs)
+                        client.post(_ALGOLIA_URL, json=active_payload(p), headers=_hdrs)
                         for p in range(batch_start, batch_end)
                     ]
                     responses = await asyncio.gather(*tasks, return_exceptions=True)
