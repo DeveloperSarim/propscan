@@ -88,9 +88,9 @@ Each platform's `search_properties` uses a different technique. `get_cities` / `
 - Filters (price, rooms, baths) applied client-side in `_parse_wasalt_props`.
 
 **Property Finder** (`scrapers/property_finder.py`) — **curl_cffi + `__NEXT_DATA__`** (no longer Playwright for search)
-- Fetches `https://www.propertyfinder.sa/en/search/?l=sa&c=1&q={city}&page=N` with `impersonate="chrome124"` — **trailing slash before `?` is critical**.
+- Fetches `https://www.propertyfinder.sa/en/search/?l={loc_id}&c=1&page=N` with `impersonate="chrome124"` — **trailing slash before `?` is critical**. One shared session + a 12-slot semaphore; each request hard-capped via `asyncio.wait_for` (curl_cffi's own timeout is unreliable).
 - `c=1` = for-sale, `c=2` = for-rent. Category IDs in `_CATEGORY_MAP`.
-- **Known limitation** — the `q` param is free text and does NOT reliably filter by city; PF returns Riyadh-heavy defaults. A client-side **city guard** in `_parse_hit_to_property` drops any listing whose location doesn't name the requested city, so PF never shows wrong-city data (but returns fewer results). Proper fix needs PF's numeric location IDs. `get_cities`/`get_areas` still use Playwright.
+- **City filtering via numeric location ID** — the free-text `q=<city>` param does NOT filter (returns Riyadh/Jazan/etc. defaults). `l=<PF location id>` filters server-side: `_PF_LOCATION_IDS` maps `riyadh→8216`, `jeddah→2658` (discovered from listing `location.path` = `region.city.district`). `l=2658` → ~1034 Jeddah for-sale. Cities not in the map fall back to `q=<city>` + a client-side **city guard** that drops non-matching-city listings. PF's location autocomplete API is no longer reachable, so add new city IDs by reading `location.path` from a listing in that city. `get_cities`/`get_areas` still use Playwright.
 
 ### Area / district filtering (all 4 platforms)
 
