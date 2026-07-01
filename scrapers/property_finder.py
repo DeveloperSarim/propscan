@@ -30,6 +30,14 @@ logger = logging.getLogger(__name__)
 
 BASE = "https://www.propertyfinder.sa"
 
+# PropertyFinder numeric location IDs for the `l=` search param (city level).
+# Discovered from listing location paths ("region.city.district"). Cities not
+# listed fall back to the free-text `q=` search + client-side city guard.
+_PF_LOCATION_IDS: dict = {
+    "riyadh": "8216",
+    "jeddah": "2658",
+}
+
 _CITIES_FALLBACK = [
     {"id": "1", "name": "Riyadh", "name_ar": "الرياض", "slug": "riyadh"},
     {"id": "2", "name": "Jeddah", "name_ar": "جدة", "slug": "jeddah"},
@@ -548,10 +556,19 @@ class PropertyFinderScraper(BaseScraper):
 
         # Build search URL using /en/search/ which bypasses Cloudflare on curl_cffi
         purpose_code = "2" if request.purpose == "for-rent" else "1"
-        city_q = (request.city or "riyadh").strip()
-        if request.area:
-            city_q = f"{request.area}, {city_q}"
-        params: dict = {"l": "sa", "c": purpose_code, "q": city_q}
+        city_str = (request.city or "riyadh").strip().lower()
+        # `l=<PF location id>` filters server-side to that city (e.g. l=2658 →
+        # Jeddah returns ~1034 for-sale). The free-text `q=<city>` does NOT
+        # filter (returns Riyadh/Jazan/etc. defaults), so we prefer the id when
+        # known and fall back to q for cities we haven't resolved.
+        loc_id = _PF_LOCATION_IDS.get(city_str)
+        if loc_id:
+            params: dict = {"l": loc_id, "c": purpose_code}
+        else:
+            city_q = (request.city or "riyadh").strip()
+            if request.area:
+                city_q = f"{request.area}, {city_q}"
+            params = {"l": "sa", "c": purpose_code, "q": city_q}
         if request.property_type:
             cat = _CATEGORY_MAP.get(request.property_type.lower())
             if cat:
@@ -587,7 +604,11 @@ class PropertyFinderScraper(BaseScraper):
             async with sem:
                 for attempt in range(2):
                     try:
-                        r = await session.get(url, headers=hdrs, timeout=25)
+                        # curl_cffi's own timeout isn't reliable (pages hung ~70s
+                        # and were lost) — hard-cap each request with wait_for.
+                        r = await asyncio.wait_for(
+                            session.get(url, headers=hdrs, timeout=25), timeout=30,
+                        )
                         if r.status_code == 200:
                             m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.S)
                             if m:
