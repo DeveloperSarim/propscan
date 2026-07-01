@@ -115,6 +115,32 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Tolerant district match — the backend already filters each platform to the
+// requested district, but district *labels* differ across platforms (Aqar is
+// Arabic, Wasalt transliterates "Shamaliyah" as "Shamalyyah"). An exact string
+// compare would wrongly hide Aqar/Wasalt results, so we compare fuzzily and
+// trust the backend for non-Latin (Arabic) labels.
+function _districtMatch(selected: string, dist: string): boolean {
+  if (!selected) return true;
+  if (!dist) return true;                       // no label → trust backend filter
+  if (/[^\x00-\x7F]/.test(dist)) return true;   // Arabic label (Aqar) → trust backend
+  const stop = new Set(["al", "the", "district", "jeddah", "riyadh", "dammam", "mecca", "medina"]);
+  const toks = (t: string) =>
+    t.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ")
+      .filter((w) => w.length >= 3 && !stop.has(w));
+  const nrm = (w: string) => w.replace(/[aeiou]+/g, "a").replace(/(.)\1+/g, "$1");
+  const need = toks(selected), hay = toks(dist);
+  if (!need.length || !hay.length) return true;
+  return need.every((n) =>
+    hay.some((h) => {
+      const a = nrm(n), b = nrm(h);
+      let cp = 0;
+      while (cp < a.length && cp < b.length && a[cp] === b[cp]) cp++;
+      return a === b || cp >= 4;
+    })
+  );
+}
+
 export function filtered(s: State): Property[] {
   // liveProps is already filtered by city/purpose by the backend; apply
   // client-side filters for instant responsiveness on filter changes
@@ -140,7 +166,7 @@ export function filtered(s: State): Property[] {
   const amn = parseFloat(s.areaMin), amx = parseFloat(s.areaMax);
   if (!isNaN(amn)) list = list.filter((p) => p.area >= amn);
   if (!isNaN(amx)) list = list.filter((p) => p.area <= amx);
-  if (s.district) list = list.filter((p) => p.district === s.district);
+  if (s.district) list = list.filter((p) => _districtMatch(s.district, p.district));
   if (s.savedOnly) list = list.filter((p) => s.savedIds.includes(p.id));
   // Pin radius filter — only active after user taps "Search" in the pin popup
   if (s.pinSearched && s.searchPin && s.pinRadius < 100) {
