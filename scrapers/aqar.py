@@ -500,11 +500,17 @@ async () => {{
                 logger.warning("[aqar] stream: probe failed")
                 return
 
+            # Area searches filter client-side, so cap the page depth — a
+            # recency-sorted sample contains plenty of the target district and
+            # avoids grinding through the whole city (which 429-storms and makes
+            # the stream look stuck on "loading").
+            page_cap = 80 if request.area else 2000
             items0 = _extract_listings(r0.text)
-            pages  = _total_pages(r0.text, cap=2000)
+            pages  = _total_pages(r0.text, cap=page_cap)
             all_raw: List[dict] = list(items0)
 
-            logger.info("[aqar] stream: %d pages, yielding batches of 25", pages)
+            logger.info("[aqar] stream: %d pages (area=%s), yielding batches of 25",
+                        pages, bool(request.area))
 
             # Yield first page immediately
             props0 = [p for p in (self._parse_item(i, request) for i in items0) if p]
@@ -567,7 +573,7 @@ async () => {{
                 # In area mode we filter client-side, so we don't need the full
                 # multi-thousand-page city dump — a capped recency-sorted sample
                 # contains plenty of the target district and keeps the search fast.
-                page_cap = 300 if area_mode else 2000
+                page_cap = 80 if area_mode else 2000
                 # Sub-regions / beds-segmentation multiply the fetch for full city
                 # coverage; skip them in area mode (the cap + client filter suffice).
                 use_subregions = not pt and not area_mode
