@@ -328,34 +328,43 @@ class WasaltScraper(BaseScraper):
         for prop in self._parse_wasalt_props(props0, seen_ids, purpose, city_slug, request):
             properties.append(prop)
 
-        # ── Remaining pages in parallel batches of 20 ────────────────
-        BATCH = 20
+        # ── Remaining pages — all fetched concurrently under a semaphore ──────
+        # (Sequential batches of 20 took ~10 min for a 340-page city and blew
+        # past the frontend's 5-min timeout, so Wasalt showed as failed. A
+        # 40-slot semaphore fetches everything at once and finishes in ~2 min.)
+        CONCURRENCY = 40
+        sem = asyncio.Semaphore(CONCURRENCY)
+
+        async def _fetch_page(session, pg: int):
+            async with sem:
+                try:
+                    return await session.get(f"{base_url}&page={pg}", headers=hdrs, timeout=30)
+                except Exception:
+                    return None
+
         async with AsyncSession(impersonate=working_imp) as session:
-            for batch_start in range(2, total_pages + 1, BATCH):
-                batch_end = min(batch_start + BATCH, total_pages + 1)
-                tasks = [
-                    session.get(f"{base_url}&page={pg}", headers=hdrs, timeout=45)
-                    for pg in range(batch_start, batch_end)
-                ]
-                responses = await asyncio.gather(*tasks, return_exceptions=True)
-                for resp in responses:
-                    if isinstance(resp, Exception):
-                        continue
-                    if resp.status_code != 200:
-                        continue
-                    m2 = re.search(
-                        r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',
-                        resp.text, re.S,
-                    )
-                    if not m2:
-                        continue
-                    data2  = json.loads(m2.group(1))
-                    sr2    = data2.get("props", {}).get("pageProps", {}).get("searchResult", {})
-                    props2 = sr2.get("properties", []) if isinstance(sr2, dict) else []
-                    for prop in self._parse_wasalt_props(
-                        props2, seen_ids, purpose, city_slug, request
-                    ):
-                        properties.append(prop)
+            responses = await asyncio.gather(
+                *[_fetch_page(session, pg) for pg in range(2, total_pages + 1)],
+                return_exceptions=True,
+            )
+            for resp in responses:
+                if isinstance(resp, Exception) or resp is None:
+                    continue
+                if resp.status_code != 200:
+                    continue
+                m2 = re.search(
+                    r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',
+                    resp.text, re.S,
+                )
+                if not m2:
+                    continue
+                data2  = json.loads(m2.group(1))
+                sr2    = data2.get("props", {}).get("pageProps", {}).get("searchResult", {})
+                props2 = sr2.get("properties", []) if isinstance(sr2, dict) else []
+                for prop in self._parse_wasalt_props(
+                    props2, seen_ids, purpose, city_slug, request
+                ):
+                    properties.append(prop)
 
         logger.info("[wasalt] Done — %d properties", len(properties))
         return properties

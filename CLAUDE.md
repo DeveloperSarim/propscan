@@ -20,9 +20,24 @@ open http://localhost:8000/docs
 
 There are no automated tests. Validation is done manually via the Swagger UI or curl against the running API.
 
+### Docker (primary deployment)
+
+```bash
+# One command — auto-creates .env, builds frontend + backend, runs on a unique port
+bash start.sh
+
+# Manual
+docker compose up -d --build          # build + run (port from .env PORT, default 4823→8000)
+docker logs platformsscraper-propscan-1 --tail 50   # container logs
+```
+
+The Dockerfile is multi-stage: a `node:20` stage builds `frontend/` (Vite → `frontend/dist`), then the `mcr.microsoft.com/playwright/python:v1.44.0-jammy` stage runs the API and serves the built frontend. **Editing frontend code requires `docker compose up -d --build`** (the bundle is baked into the image), then a browser hard-refresh (Cmd+Shift+R) to bust the cached JS.
+
+`SMTP_PASS` and other secrets live only in `.env` (gitignored) — never commit them.
+
 ## Architecture
 
-**FastAPI + mixed scraping backends** for Saudi Arabia real estate. No database — in-memory TTL cache only.
+**FastAPI + mixed scraping backends** for Saudi Arabia real estate. No database — in-memory TTL cache only. A React/Vite frontend (`frontend/`) is served from the same container.
 
 ### Request flow
 
@@ -56,8 +71,9 @@ Each platform's `search_properties` uses a different technique. `get_cities` / `
   - With type: uses `_SLUGS_AR[(type, purpose)]` e.g. `شقق-للبيع/جدة`.
   - Paginated URLs: `/{base}/{page_num}?beds=N&wc=N` — page number comes **before** the query string.
 - Server-side filters supported: `beds=N` (rooms) and `wc=N` (bathrooms) as URL params. Price and area are filtered client-side in `_parse_item`.
-- Sub-regions (`_SUBREGIONS`) only activate when `city_pages >= SAFETY_CAP` (i.e., city has >40k listings). They are subsets of the city — used to cover the overflow, not to add new listings.
-- `impersonate="chrome110"`, concurrency 30.
+- Sub-regions (`_SUBREGIONS`) + beds-segmentation add coverage for generic (no type, no area) city searches; both are turned OFF in area mode.
+- Rotates impersonations (`chrome107/110/120/124`, `safari15_3/17_0`), throttled to ~10 req/s with a 30-slot semaphore; 429s are retried with backoff.
+- **Streaming endpoint** `POST /search/stream-aqar` (`stream_properties`) yields SSE batches so the frontend shows Aqar results progressively. The frontend calls this (not the blocking `/search`) for Aqar. Area searches are capped at 80 pages here too.
 
 **Bayut** (`scrapers/bayut.py`) — **Algolia REST API**
 - POSTs to `https://LL8IZ711CS-dsn.algolia.net/1/indexes/bayut-sa-production-ads-city-level-score-ar/query` using Bayut's public Algolia credentials embedded in their client-side JS.
@@ -66,17 +82,26 @@ Each platform's `search_properties` uses a different technique. `get_cities` / `
 - No browser/Playwright needed for search — plain `httpx.AsyncClient`.
 
 **Wasalt** (`scrapers/wasalt.py`) — **curl_cffi + `__NEXT_DATA__`**
-- Fetches HTML pages with `impersonate="safari15_3"` (bypasses Cloudflare TLS check).
-- Extracts listings from `<script id="__NEXT_DATA__">` JSON embedded in each page.
-- `totalPages` comes from `searchResult.totalPages`; capped at `min(total, max_pages, 340)`.
-- URL: `https://wasalt.sa/en/{type}-for-{sale|rent}-in-{city}?page=N`. Batches 20 pages at a time.
-- Filters (price, rooms) applied client-side in `_parse_wasalt_props`.
+- Fetches HTML from `https://wasalt.sa/en/{sale|rent}/search?propertyFor=...&cityId={id}` and extracts `<script id="__NEXT_DATA__">` JSON.
+- **Impersonation fallback**: tries `safari15_3 → chrome120 → chrome124 → safari17_0` (Docker/Linux sometimes needs chrome instead of safari); 45s timeout per request.
+- `totalPages` from `searchResult.totalPages`; capped `min(total, max_pages, 400)`.
+- Filters (price, rooms, baths) applied client-side in `_parse_wasalt_props`.
 
-**Property Finder** (`scrapers/property_finder.py`) — **Playwright + `__NEXT_DATA__`**
-- Uses a **single browser for all pages** — `context.clear_cookies()` + localStorage/sessionStorage clear before each page (resets PF's cookie-based bot detection without relaunching Chrome).
-- URL: `https://www.propertyfinder.sa/en/search/?l=sa&c=1&q=Riyadh&page=N` — **trailing slash before `?` is critical**; without it, page 2+ returns 0 results.
-- `_extract_page` reads `__NEXT_DATA__` for lat/lng, description, reference numbers not in card DOM.
+**Property Finder** (`scrapers/property_finder.py`) — **curl_cffi + `__NEXT_DATA__`** (no longer Playwright for search)
+- Fetches `https://www.propertyfinder.sa/en/search/?l=sa&c=1&q={city}&page=N` with `impersonate="chrome124"` — **trailing slash before `?` is critical**.
 - `c=1` = for-sale, `c=2` = for-rent. Category IDs in `_CATEGORY_MAP`.
+- **Known limitation** — the `q` param is free text and does NOT reliably filter by city; PF returns Riyadh-heavy defaults. A client-side **city guard** in `_parse_hit_to_property` drops any listing whose location doesn't name the requested city, so PF never shows wrong-city data (but returns fewer results). Proper fix needs PF's numeric location IDs. `get_cities`/`get_areas` still use Playwright.
+
+### Area / district filtering (all 4 platforms)
+
+The frontend sends the selected district as `area` (an English display name, e.g. `"Obhur Al Shamaliyah"`). Each platform resolves it differently — verified against live data, not guessed:
+
+- **Bayut** — server-side. Districts nest under a ZONE in Algolia slugs (`/jeddah/north-jeddah/obhur-al-shamaliyah`), so the zone is unknown up front. `_resolve_area_slug()` runs a discovery query (city hits, `hitsPerPage=1000`) to find the location entry whose `slug_l1` ends with `/{area_slug}`, then filters with that full slug. `area` field on the returned Property = the deepest location `name_l1` (English district name), NOT the Arabic zone slug.
+- **Aqar** — client-side. District-specific URL paths trigger a Cloudflare challenge (429 "Just a moment…"); only the generic city URL passes. So it fetches the city (capped **80 pages** in area mode; subregions + beds-segmentation OFF) and filters on the Arabic `district` field via `_norm_ar()` (hamza/alef/taa-marbuta normalization). Cache key includes `:area` vs `:full` so the two modes don't collide.
+- **Wasalt** — client-side. Wasalt's `districtSlug` URL param is **ignored** (returns whole city); samples 25 pages and filters on the property's English district name.
+- **Property Finder** — client-side (`_area_matches`), gated behind the city guard.
+
+Wasalt + PF share `scrapers/area_match.py` (`area_matches`) — a transliteration-tolerant matcher: vowel-run normalization (`Shamaliyah`≈`Shamalyyah`, `Rawdah`≈`Rawdhah`, `Janubiyah`≈`Janoubeyyah`), a 4-char common-prefix floor, and sub-3-char token drop (rejects stray `Al Faiha|A` fragments). The **frontend** re-applies its own tolerant district filter in `frontend/src/store/logic.ts` `_districtMatch()` — needed because Aqar labels are Arabic and Wasalt transliterates differently, so an exact `===` would hide them from map/list even after the backend filtered correctly.
 
 ### Browser setup (`scrapers/base.py`)
 

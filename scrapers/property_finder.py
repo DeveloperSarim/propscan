@@ -575,48 +575,54 @@ class PropertyFinderScraper(BaseScraper):
         properties: List[Property] = []
         seen_hrefs: set = set()
 
-        async def _fetch_page(page_num: int):
+        # One shared session + a semaphore. Previously each page opened its own
+        # AsyncSession at concurrency 10, which PF throttled — pages hung for 70s
+        # and were lost, so only ~500 of ~1400 listings came back. A shared
+        # session at concurrency 12 with a short 25s timeout keeps pages flowing.
+        CONCURRENCY = 12
+        sem = asyncio.Semaphore(CONCURRENCY)
+
+        async def _fetch_page(session, page_num: int):
             url = base_search if page_num == 1 else f"{base_search}&page={page_num}"
-            for attempt in range(2):
-                try:
-                    async with AsyncSession(impersonate="chrome124") as client:
-                        r = await client.get(url, headers=hdrs, timeout=20)
-                    if r.status_code == 200:
-                        m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.S)
-                        if m:
-                            data = json.loads(m.group(1))
-                            return data
-                    elif r.status_code in (404, 403):
-                        return None
-                except Exception as exc:
-                    logger.warning("[property_finder] page %d attempt %d: %s", page_num, attempt + 1, exc)
-                    await asyncio.sleep(1)
-            return None
+            async with sem:
+                for attempt in range(2):
+                    try:
+                        r = await session.get(url, headers=hdrs, timeout=25)
+                        if r.status_code == 200:
+                            m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.S)
+                            if m:
+                                return json.loads(m.group(1))
+                        elif r.status_code in (404, 403):
+                            return None
+                    except Exception as exc:
+                        logger.warning("[property_finder] page %d attempt %d: %s", page_num, attempt + 1, exc)
+                        await asyncio.sleep(1)
+                return None
 
-        # Probe page 1 — get total page count from meta
-        data1 = await _fetch_page(1)
-        if not data1:
-            logger.info("[property_finder] 0 results from %s", base_search)
-            return []
+        async with AsyncSession(impersonate="chrome124") as session:
+            # Probe page 1 — get total page count from meta
+            data1 = await _fetch_page(session, 1)
+            if not data1:
+                logger.info("[property_finder] 0 results from %s", base_search)
+                return []
 
-        page1_props = self._parse_pf_page(data1, request)
-        total_pages = min(self._get_pf_total_pages(data1), max_pages)
-        logger.info("[property_finder] %d total pages, fetching up to %d", total_pages, max_pages)
+            page1_props = self._parse_pf_page(data1, request)
+            total_pages = min(self._get_pf_total_pages(data1), max_pages)
+            logger.info("[property_finder] %d total pages, fetching up to %d", total_pages, max_pages)
 
-        for prop in page1_props:
-            if prop.listing_url and prop.listing_url not in seen_hrefs:
-                seen_hrefs.add(prop.listing_url)
-                properties.append(prop)
+            for prop in page1_props:
+                if prop.listing_url and prop.listing_url not in seen_hrefs:
+                    seen_hrefs.add(prop.listing_url)
+                    properties.append(prop)
 
-        if not page1_props:
-            return []
+            if not page1_props:
+                return []
 
-        # Fetch remaining pages in parallel batches of 10
-        BATCH = 10
-        for batch_start in range(2, total_pages + 1, BATCH):
-            batch_end = min(batch_start + BATCH, total_pages + 1)
-            tasks = [_fetch_page(p) for p in range(batch_start, batch_end)]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # Fetch all remaining pages concurrently (semaphore bounds the load)
+            results = await asyncio.gather(
+                *[_fetch_page(session, p) for p in range(2, total_pages + 1)],
+                return_exceptions=True,
+            )
             for res in results:
                 if isinstance(res, dict):
                     for prop in self._parse_pf_page(res, request):
