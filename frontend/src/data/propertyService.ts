@@ -252,7 +252,10 @@ export const propertyService = {
     }
 
     const controller = new AbortController();
-    const timeoutMs = isAqar ? 660_000 : 300_000; // 11 min for Aqar (33k pages), 5 min for others
+    // Aqar: 11 min (33k pages). Wasalt: 9 min — a full city is ~260 pages and,
+    // when all platforms run in parallel, network contention pushes it to ~5 min
+    // (it was hitting the old 5-min cap and showing as failed). Others: 5 min.
+    const timeoutMs = isAqar ? 660_000 : isWasalt ? 540_000 : 300_000;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let res: Response;
     try {
