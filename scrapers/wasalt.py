@@ -320,7 +320,7 @@ class WasaltScraper(BaseScraper):
         sr0         = data0.get("props", {}).get("pageProps", {}).get("searchResult", {})
         props0      = sr0.get("properties", []) if isinstance(sr0, dict) else []
         total_pages = int(sr0.get("totalPages") or 1)
-        total_pages = min(total_pages, max_pages, 400)
+        total_pages = min(total_pages, max_pages, 260)
 
         logger.info("[wasalt] %s total listings, %d pages (using %s)",
                     sr0.get("count", "?"), total_pages, working_imp)
@@ -328,17 +328,21 @@ class WasaltScraper(BaseScraper):
         for prop in self._parse_wasalt_props(props0, seen_ids, purpose, city_slug, request):
             properties.append(prop)
 
-        # ── Remaining pages — all fetched concurrently under a semaphore ──────
-        # (Sequential batches of 20 took ~10 min for a 340-page city and blew
-        # past the frontend's 5-min timeout, so Wasalt showed as failed. A
-        # 40-slot semaphore fetches everything at once and finishes in ~2 min.)
-        CONCURRENCY = 40
+        # ── Remaining pages — concurrent under a semaphore ───────────────────
+        # Sequential batches of 20 took ~10 min for a 340-page city and blew
+        # past the frontend's 5-min timeout (Wasalt showed as failed). curl_cffi
+        # doesn't reliably honour its own `timeout`, so each request is also
+        # hard-capped with asyncio.wait_for to stop stragglers hanging the gather.
+        CONCURRENCY = 24
         sem = asyncio.Semaphore(CONCURRENCY)
 
         async def _fetch_page(session, pg: int):
             async with sem:
                 try:
-                    return await session.get(f"{base_url}&page={pg}", headers=hdrs, timeout=30)
+                    return await asyncio.wait_for(
+                        session.get(f"{base_url}&page={pg}", headers=hdrs, timeout=25),
+                        timeout=30,
+                    )
                 except Exception:
                     return None
 
